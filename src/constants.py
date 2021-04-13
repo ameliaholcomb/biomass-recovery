@@ -1,3 +1,4 @@
+"""Module contains all project wide constants."""
 # Place all your constants here
 import os
 

@@ -1,0 +1,3 @@
+# NOTE: Your final requirements for production/publishing the repo go here.
+
+python-dotenv       # environment variable manager

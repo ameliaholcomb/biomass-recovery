@@ -1,0 +1,9 @@
+# NOTE: These requirements are used for continuous integration (CI)
+# meta requirements
+virtualenv
+
+
+# linting
+pylint==2.7.4   # General linting code
+darglint        # Linting docstrings
+pydocstyle      # Linting docstrings

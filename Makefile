@@ -26,14 +26,23 @@ clean:
 
 ## Lint src directory using flake8
 lint:
-	flake8 src
+	pylint src
+	pydocstyle src
+	darglint src
 
 ## Format src directory using black
 format: 
+	isort  --virtual-env env  src
+	autoflake -r --in-place --remove-unused-variables src
 	black src
 
+## Set up pre-commit hooks
+precommit:
+	pip install pre-commit black pylint isort
+	pre-commit install
+
 ## Set up python interpreter environment and install basic dependencies
-create_environment:
+env:
 ifeq (True,$(HAS_CONDA))
 	@echo ">>> Detected conda, creating conda environment."
 	
@@ -51,19 +60,17 @@ else
 endif
 
 ## Install and set up handy jupyter notebook extensions
-install_jupyter_tools:
+jupyter_pro:
 	sh ./.setup_scripts/jupyter_tools.sh
 
 ## Set up sweet vscode settings
-vscode_beautiful:
+vscode_pro:
 	mkdir .vscode
 	cp ./.setup_scripts/vscode_settings.jsonc .vscode/settings.json
 
 #################################################################################
 # PROJECT RULES                                                                 #
 #################################################################################
-
-# TODO: VSCode setup
 
 
 #################################################################################

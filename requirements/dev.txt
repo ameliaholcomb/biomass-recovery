@@ -2,12 +2,13 @@
 # As a standard they include certain formatters and linters.
 
 # local package
--e ../.
+-e ./
+
+# Import production and test requirements as well
+-r prod.txt
+-r test.txt
 
 # external requirements (mostly linters and formatters)
-flake8              # flake8 linter
-flake8-docstrings   # docstring support for flake8
 mypy                # python type checker
 black               # automatic formatting provider
 isort               # automatic import sorter
-python-dotenv       # environment variable manager
