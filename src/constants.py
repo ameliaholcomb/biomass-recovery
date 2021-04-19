@@ -1,8 +1,27 @@
 """Module contains all project wide constants."""
-# Place all your constants here
-import os
+import logging
+from pathlib import Path
 
-# Note: constants should be UPPER_CASE
-constants_path = os.path.realpath(__file__)
-SRC_PATH = os.path.dirname(constants_path)
-PROJECT_PATH = os.path.dirname(SRC_PATH)
+# ---------------- PATH CONSTANTS -------------------
+#  Source folder path
+constants_path = Path(__file__)
+SRC_PATH = constants_path.parent
+PROJECT_PATH = SRC_PATH.parent
+
+# Log relatedd paths
+LOG_PATH = PROJECT_PATH / "logs"
+LOG_PATH.mkdir(parents=True, exist_ok=True)
+
+#  Data related paths
+DATA_PATH = Path("/gws/nopw/j04/forecol/data")
+
+
+# ---------------- LOGGING CONSTANTS ----------------
+DEFAULT_FORMATTER = logging.Formatter(
+    (
+        "%(asctime)s %(levelname)s: %(message)s "
+        "[in %(funcName)s at %(pathname)s:%(lineno)d]"
+    )
+)
+DEFAULT_LOG_FILE = LOG_PATH / "default_log.log"
+DEFAULT_LOG_LEVEL = logging.DEBUG  # verbose logging per default
