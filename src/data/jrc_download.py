@@ -3,7 +3,7 @@ Script for downloading data from EU TMF project
     https://forobs.jrc.ec.europa.eu/TMF/download/#download
 """
 import multiprocessing
-import os
+import pathlib
 import subprocess
 
 import psutil
@@ -30,7 +30,7 @@ JRC_DATASETS = [
 
 
 def is_already_downloaded(
-    outpath: os.PathLike, dataset: str, lat: str, lon: str
+    outpath: pathlib.Path, dataset: str, lat: str, lon: str
 ) -> bool:
     """
     Returns true, iff given JCR dataset is already downloaded.
@@ -74,12 +74,14 @@ def construct_jrc_query(dataset: str, lat: str, lon: str) -> str:
     )
 
 
-def download_file(outpath: os.PathLike, file_url: str) -> int:
+def download_file(outpath: pathlib.Path, file_url: str) -> int:
     logger.info("Downloading resource %s", file_url)
-    subprocess.call(["wget", "--content-disposition", "-P", outpath, file_url])
+    return subprocess.call(["wget", "--content-disposition", "-P", outpath, file_url])
 
 
-def download_jrc_dataset(dataset: str, outdir: os.PathLike = DATA_PATH / "JRC") -> None:
+def download_jrc_dataset(
+    dataset: str, outdir: pathlib.Path = DATA_PATH / "JRC"
+) -> None:
     """
     Check if given JRC dataset has already been downloaded in the output directory
     and download all tiles of the dataset if it is not there yet.
@@ -113,7 +115,8 @@ if __name__ == "__main__":
     if use_multiple_workers:
         # Make sure num_workers isn't higher than available CPUs
         core_count = psutil.cpu_count(logical=False)
-        n_workers = min(len(JRC_DATASETS), core_count)
+        dataset_count = len(JRC_DATASETS)
+        n_workers = min(dataset_count, core_count)
 
         # Set up multiprocessing download
         pool = multiprocessing.Pool(n_workers)
