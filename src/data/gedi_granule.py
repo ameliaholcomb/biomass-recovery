@@ -86,7 +86,9 @@ def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
     parse_result = re.search(gedi_naming_pattern, gedi_filename)
 
     if parse_result is None:
-        raise ValueError("Filename does not conform the the GEDI naming pattern.")
+        raise ValueError(
+            f"Filename {gedi_filename} does not conform the the GEDI naming pattern."
+        )
     return GediNameMetadata(*parse_result.groups())
 
 
@@ -169,17 +171,26 @@ class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
         return list(self.iter_beams())
 
     def __repr__(self) -> str:
-        description = (
-            "GEDI Granule:\n"
-            f" Granule name: {self.filename}\n"
-            f" Sub-granule:  {self.filename_metadata.sub_orbit_granule}\n"
-            f" Product:      {self.product}\n"
-            f" Release:      {self.filename_metadata.release_number}\n"
-            f" No. beams:    {self.n_beams}\n"
-            f" Start date:   {self.start_datetime.date()}\n"
-            f" Start time:   {self.start_datetime.time()}\n"
-            f" HDF object:   {super().__repr__()}"
-        )
+        try:
+            description = (
+                "GEDI Granule:\n"
+                f" Granule name: {self.filename}\n"
+                f" Sub-granule:  {self.filename_metadata.sub_orbit_granule}\n"
+                f" Product:      {self.product}\n"
+                f" Release:      {self.filename_metadata.release_number}\n"
+                f" No. beams:    {self.n_beams}\n"
+                f" Start date:   {self.start_datetime.date()}\n"
+                f" Start time:   {self.start_datetime.time()}\n"
+                f" HDF object:   {super().__repr__()}"
+            )
+        except ValueError:
+            description = (
+                "GEDI Granule:\n"
+                f" Granule name: {self.filename}\n"
+                f" Product:      {self.product}\n"
+                f" No. beams:    {self.n_beams}\n"
+                f" HDF object:   {super().__repr__()}"
+            )
         return description
 
 
@@ -224,19 +235,24 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
     @property
     def shot_geolocations(self) -> geopandas.array.GeometryArray:
         """
-        Return an array of shapely Point objects at the (lon, lat) of the lowest mode.
+        Return an array of shapely Point objects at the (lon, lat) of each shot.
+
+        Note:
+        For GEDI_L1B products the (lon, lat) coordinates of the last bin in the return
+        waveform are returned.
+        For GEDI_L2A products the (lon, lat) coordinates of the lowest detected mode
+        (i.e. ground mode), as detected by the GEDI selected algorithm, are returned.
+        As a result, it is expected that the (lon, lat) values for the same shot but
+        different products is not exactly the same.
 
         Returns:
             geopandas.array.GeometryArray: A geometry array containing shapely Point
-                objects at the (longitude, latitude) positions of the lowest detected
-                mode (by the GEDI selected algorithm). Longitude, Latitude coordinates
-                are given in the WGS84 coordinate reference system.
+                objects at the (longitude, latitude) positions of the shots in the beam.
+                Longitude, Latitude coordinates are given in the WGS84 coordinate
+                reference system.
         """
         geolocations = np.array(
-            [
-                shapely.geometry.Point(lon, lat)
-                for lon, lat in zip(self["lon_lowestmode"], self["lat_lowestmode"])
-            ],
+            [shapely.geometry.Point(lon, lat) for lon, lat in self.shot_lon_lat],
             dtype=shapely.geometry.Point,
         )
 
@@ -244,45 +260,100 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
 
     @property
     def shot_lon_lat(self) -> list[tuple[float, float]]:
+        """
+        Return a list of (lon, lat) coordinates of each shot in the beam.
+
+        Note:
+        For GEDI_L1B products the (lon, lat) coordinates of the last bin in the return
+        waveform are returned.
+        For GEDI_L2A procuts the (lon, lat) coordinates of the lowest mode (i.e. the
+        ground mode) are returned.
+        As a result, it is expected that the (lon, lat) values for the same shot but
+        different products is not exactly the same.
+
+        Returns:
+            list[tuple[float, float]]: A list with the (longitude, latitude) positions
+                of the shots in the beam. Longitude, Latitude coordinates are given in
+                the WGS84 coordinate reference system.
+        """
         if self._shot_lon_lat is None:
-            self._shot_lon_lat = list(
-                zip(self["lon_lowestmode"], self["lat_lowestmode"])
-            )
+            if self.parent_granule.product == "GEDI_L2A":
+                self._shot_lon_lat = list(
+                    zip(self["lon_lowestmode"], self["lat_lowestmode"])
+                )
+            elif self.parent_granule.product == "GEDI_L1B":
+                self._shot_lon_lat = list(
+                    zip(
+                        self["geolocation/longitude_lastbin"],
+                        self["geolocation/latitude_lastbin"],
+                    )
+                )
+            else:
+                raise NotImplementedError(
+                    "No method to get main data for "
+                    f"product {self.parent_granule.product}"
+                )
         return self._shot_lon_lat
 
     @property
     def main_data(self) -> gpd.GeoDataFrame:
+        """
+        Return the main data for all shots in beam as geopandas DataFrame.
+
+        Supports the following products: GEDI_L1B, GEDI_L2A
+
+        Returns:
+            gpd.GeoDataFrame: A geopandas DataFrame containing the main data for the
+                given beam object.
+        """
         if self._cached_data is None:
-            data = self._get_main_data_dict
+            data = self._get_main_data_dict()
             geometry = self.shot_geolocations
 
             self._cached_data = gpd.GeoDataFrame(data, geometry=geometry, crs=WGS84)
 
         return self._cached_data
 
-    @property
     def _get_main_data_dict(self) -> dict:
+        """Returns correct main data depending on product"""
+        if self.parent_granule.product == "GEDI_L1B":
+            return self._get_gedi1b_main_data_dict()
+        elif self.parent_granule.product == "GEDI_L2A":
+            return self._get_gedi2a_main_data_dict()
+        else:
+            raise NotImplementedError(
+                f"No method to get main data for product {self.parent_granule.product}"
+            )
+
+    def _get_gedi2a_main_data_dict(self) -> dict:
         """
-        Return the main data for all shots in the beam as dictionary.
+        Return the main data for all shots in a GEDI L2A product beam as dictionary.
 
         Returns:
             dict: A dictionary containing the main data for all shots in the given
                 beam of the granule.
         """
-        # TODO: Adapt for Level 1B
         data = {
+            # General identifiable data
             "granule_name": [self.parent_granule.filename] * self.n_shots,
             "shot_number": self["shot_number"][:],
             "beam_type": [self.beam_type] * self.n_shots,
             "beam_name": [self.name] * self.n_shots,
+            # Temporal data
             "delta_time": self["delta_time"][:],
+            # Quality data
             "sensitivity": self["sensitivity"][:],
             "quality_flag": self["quality_flag"][:],
             "solar_elevation": self["solar_elevation"][:],
             "solar_azimuth": self["solar_elevation"][:],
             "energy_total": self["energy_total"][:],
+            # DEM
+            "dem_tandemx": self["digital_elevation_model"][:],
+            "dem_srtm": self["digital_elevation_model_srtm"][:],
+            # Processing data
             "selected_algorithm": self["selected_algorithm"][:],
             "selected_mode": self["selected_mode"][:],
+            # Geolocation data
             "lon_lowestmode": self["lon_lowestmode"][:],
             "longitude_bin0_error": self["longitude_bin0_error"][:],
             "lat_lowestmode": self["lat_lowestmode"][:],
@@ -293,6 +364,51 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
             "lat_highestreturn": self["lat_highestreturn"][:],
             "elev_highestreturn": self["elev_highestreturn"][:],
         } | {f"rh{i}": self["rh"][:, i] for i in range(101)}
+        return data
+
+    def _get_gedi1b_main_data_dict(self) -> dict:
+        """
+        Return the main data for all shots in a GEDI L1B product beam as dictionary.
+
+        Returns:
+            dict: A dictionary containing the main data for all shots in the given
+                beam of the granule.
+        """
+        data = {
+            # General identifiable data
+            "granule_name": [self.parent_granule.filename] * self.n_shots,
+            "shot_number": self["shot_number"][:],
+            "beam_type": [self.beam_type] * self.n_shots,
+            "beam_name": [self.name] * self.n_shots,
+            # Temporal data
+            "delta_time": self["delta_time"][:],
+            # Quality data
+            "degrade": self["geolocation/degrade"][:],
+            "stale_return_flag": self["stale_return_flag"][:],
+            "solar_elevation": self["geolocation/solar_elevation"][:],
+            "solar_azimuth": self["geolocation/solar_elevation"][:],
+            "rx_energy": self["rx_energy"][:],
+            # DEM
+            "dem_tandemx": self["geolocation/digital_elevation_model"][:],
+            "dem_srtm": self["geolocation/digital_elevation_model_srtm"][:],
+            # geolocation bin0
+            "latitude_bin0": self["geolocation/latitude_bin0"][:],
+            "latitude_bin0_error": self["geolocation/latitude_bin0_error"][:],
+            "longitude_bin0": self["geolocation/longitude_bin0"][:],
+            "longitude_bin0_error": self["geolocation/longitude_bin0_error"][:],
+            "elevation_bin0": self["geolocation/elevation_bin0"][:],
+            "elevation_bin0_error": self["geolocation/elevation_bin0_error"][:],
+            # geolocation lastbin
+            "latitude_lastbin": self["geolocation/latitude_lastbin"][:],
+            "latitude_lastbin_error": self["geolocation/latitude_lastbin_error"][:],
+            "longitude_lastbin": self["geolocation/longitude_lastbin"][:],
+            "longitude_lastbin_error": self["geolocation/longitude_lastbin_error"][:],
+            "elevation_lastbin": self["geolocation/elevation_lastbin"][:],
+            "elevation_lastbin_error": self["geolocation/elevation_lastbin_error"][:],
+            # relative waveform position info in beam and ssub-granule
+            "waveform_start": self["rx_sample_start_index"][:] - 1,
+            "waveform_count": self["rx_sample_count"][:],
+        }
         return data
 
     def __repr__(self) -> str:
