@@ -1,6 +1,7 @@
 """Module for convenient objects to deal with GEDI data products"""
 from __future__ import annotations
 
+import datetime
 import pathlib
 import re
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import shapely.geometry
+import xarray
 
 from src.constants import WGS84
 
@@ -423,3 +425,30 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
 
     def intersect(self, geometry):
         raise NotImplementedError
+
+    @property
+    def waveform(self):
+        if self.parent_granule.product != "GEDI_L1B":
+            raise NotImplementedError(
+                "Waveforms only exist for GEDI_L1B products. "
+                f"Current beam is from a {self.parent_granule.product} product."
+            )
+
+        return xarray.DataArray(
+            self["rxwaveform"][:],
+            dims=["sample_points"],
+            name=f"{self.parent_granule.filename[:-3]}_{self.name}",
+            attrs={
+                "granule": self.parent_granule.filename,
+                "beam": self.name,
+                "type": self.beam_type,
+                "creation_timestamp_utc": str(datetime.datetime.utcnow()),
+            },
+        )
+
+    def save_waveform(self, save_dir: pathlib.Path, overwrite: bool = False) -> None:
+        waveform = self.waveform
+        save_name = f"{self.parent_granule.filename[:-3]}_{self.name}.nc"
+        save_path = pathlib.Path(save_dir) / save_name
+        if overwrite or not save_path.exists():
+            waveform.to_netcdf(save_path)
