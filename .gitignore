@@ -90,3 +90,9 @@ io/
 
 # History files
 .history
+
+# Project specific files
+secrets
+secrets/
+logs
+logs/
