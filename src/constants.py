@@ -17,6 +17,7 @@ LOG_PATH = PROJECT_PATH / "logs"
 LOG_PATH.mkdir(parents=True, exist_ok=True)
 
 #  Data related paths
+USER_PATH = Path("/gws/nopw/j04/forecol/svm34")
 DATA_PATH = Path("/gws/nopw/j04/forecol/data")
 
 GEDI_PATH = DATA_PATH / "GEDI"
@@ -26,6 +27,8 @@ GEDI_L2A_PATH = GEDI_PATH / "level2A"
 JRC_PATH = DATA_PATH / "JRC"
 
 PLANET_PATH = DATA_PATH / "Planet"
+
+PAISAGENSLIDAR_PATH = DATA_PATH / "Paisagenslidar"
 
 # ---------------- API KEYS -------------------------
 PLANET_API_KEY = os.getenv("PLANET_API_KEY")
