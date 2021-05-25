@@ -215,7 +215,9 @@ class DriveAPI:
 
         return self.is_mimetype(file_id, target_mime_type="image/tiff")
 
-    def get_folder(self, folder_name: str, all_drives: bool = True) -> DriveFileJson:
+    def get_folder(
+        self, folder_name: str, all_drives: bool = True, trashed_ok: bool = False
+    ) -> DriveFileJson:
         """
         Return metadata of gdrive folder with the given `folder_name`
         Raises an error if `folder_name` does not identify a unique folder (or does
@@ -223,14 +225,18 @@ class DriveAPI:
         Args:
             folder_name (str): The name of the folder for which to obtain metadata'
             all_drives (bool): Whether to search TeamDrives. Defaults to True.
+            trashed_ok (bool): Whether to include bin in search. Defaults to False.
         Returns:
             DriveFileJson: The metadata of the requested folder as python dict.
         """
 
         file_browser = self.service.files()
+        file_metadata = {"name": folder_name, "mimeType": self.GDRIVE_FOLDER}
         # Fomulate http request
         query = file_browser.list(
-            q=f"name='{folder_name}' and mimeType='{self.GDRIVE_FOLDER}'",
+            q=self._metadata_to_query_string(
+                file_metadata=file_metadata, trashed_ok=trashed_ok
+            ),
             supportsAllDrives=all_drives,
             includeItemsFromAllDrives=all_drives,
         )
@@ -440,13 +446,13 @@ class DriveAPI:
         """
         # Write metadata for creating a folder
         file_metadata = {"name": folder_name, "mimeType": self.GDRIVE_FOLDER}
-        if parent is not None:
-            self._add_parent_to_metadata(file_metadata, parent)
         # Check if folder already exists
         if exists_ok and self.exists(file_metadata):
             print("Folder exists already")
         # Else, create
         else:
+            if parent is not None:
+                self._add_parent_to_metadata(file_metadata, parent)
             # Execute folder creation request
             self.service.files().create(
                 body=file_metadata, fields="id", supportsAllDrives=True
@@ -496,10 +502,11 @@ class DriveAPI:
             )
             # Upload file in chunks of the given size
             response = None
+            progress_bar = tqdm(desc=file_metadata["name"], total=100)
             while response is None:
                 status, response = file.next_chunk()
                 if status:
-                    print("Uploaded %d%%.", int(status.progress() * 100))
+                    progress_bar.update(status.progress())
             logger.debug("Upload of %s complete!", file_to_upload.name)
             return True
 
