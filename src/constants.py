@@ -23,12 +23,10 @@ DATA_PATH = Path("/gws/nopw/j04/forecol/data")
 GEDI_PATH = DATA_PATH / "GEDI"
 GEDI_L1B_PATH = GEDI_PATH / "level1B"
 GEDI_L2A_PATH = GEDI_PATH / "level2A"
-
 JRC_PATH = DATA_PATH / "JRC"
-
 PLANET_PATH = DATA_PATH / "Planet"
-
 PAISAGENSLIDAR_PATH = DATA_PATH / "Paisagenslidar"
+EBALIDAR_PATH = DATA_PATH / "EBA_lidar"
 
 # ---------------- API KEYS -------------------------
 PLANET_API_KEY = os.getenv("PLANET_API_KEY")
