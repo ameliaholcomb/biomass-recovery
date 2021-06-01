@@ -77,7 +77,7 @@ def _find_gedi_granules(
 
 def _polygon_to_earthdata_query_url(roi: shapely.geometry.Polygon) -> str:
     return "polygon[0]=" + "%2C".join(
-        ["%2C".join([str(lon), str(lat)]) for (lon, lat) in roi.boundary.coords]
+        ["%2C".join([str(lon), str(lat)]) for (lon, lat) in roi.boundary.coords[::-1]]
     )
 
 
