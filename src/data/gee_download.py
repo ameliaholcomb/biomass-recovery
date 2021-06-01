@@ -4,7 +4,7 @@ import argparse
 import logging
 import pathlib
 
-import tqdm
+from tqdm.autonotebook import tqdm
 
 from src.constants import DATA_PATH
 from src.data.gdrive import DriveAPI
@@ -34,7 +34,7 @@ def download_tif(
     elements = gdrive.list_files_in_folder(folder_id)
     save_path.mkdir(exist_ok=True)
 
-    progress_bar = tqdm.tqdm(
+    progress_bar = tqdm(
         elements,
         position=0,
         leave=True,
