@@ -335,6 +335,7 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
             dict: A dictionary containing the main data for all shots in the given
                 beam of the granule.
         """
+        gedi_l2a_count_start = pd.to_datetime("2018-01-01T00:00:00Z")
         data = {
             # General identifiable data
             "granule_name": [self.parent_granule.filename] * self.n_shots,
@@ -343,6 +344,10 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
             "beam_name": [self.name] * self.n_shots,
             # Temporal data
             "delta_time": self["delta_time"][:],
+            "absolute_time": (
+                gedi_l2a_count_start
+                + pd.to_timedelta(list(self["delta_time"]), unit="seconds")
+            ),
             # Quality data
             "sensitivity": self["sensitivity"][:],
             "quality_flag": self["quality_flag"][:],
