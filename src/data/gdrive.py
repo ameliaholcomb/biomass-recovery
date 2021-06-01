@@ -13,7 +13,7 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 from src.constants import PROJECT_PATH
 from src.utils.logging import get_logger
@@ -173,7 +173,11 @@ class DriveAPI:
             str: mime type of the given file
         """
 
-        query = self.service.files().get(fileId=file_id, fields="mimeType")
+        query = self.service.files().get(
+            fileId=file_id,
+            fields="mimeType",
+            supportsAllDrives=True,
+        )
         mime_type = query.execute()["mimeType"]
 
         return mime_type
@@ -282,7 +286,7 @@ class DriveAPI:
         )
         return query.execute()["name"]
 
-    def list_all_files(self) -> List[DriveFileJson]:
+    def list_all_files(self, all_drives=True) -> List[DriveFileJson]:
         """
         Lists all files which are not folders in gdrive
         Returns:
@@ -290,10 +294,14 @@ class DriveAPI:
         """
 
         file_browser = self.service.files()
-        query = file_browser.list(q=f"mimeType!='{self.GDRIVE_FOLDER}'")
+        query = file_browser.list(
+            q=f"mimeType!='{self.GDRIVE_FOLDER}'",
+            supportsAllDrives=all_drives,
+            includeItemsFromAllDrives=all_drives,
+        )
         return query.execute()["files"]
 
-    def list_all_folders(self) -> List[DriveFileJson]:
+    def list_all_folders(self, all_drives=True) -> List[DriveFileJson]:
         """
         List all folders in gdrive
         Returns:
@@ -301,7 +309,11 @@ class DriveAPI:
         """
 
         file_browser = self.service.files()
-        query = file_browser.list(q=f"mimeType='{self.GDRIVE_FOLDER}'")
+        query = file_browser.list(
+            q=f"mimeType='{self.GDRIVE_FOLDER}'",
+            supportsAllDrives=all_drives,
+            includeItemsFromAllDrives=all_drives,
+        )
         return query.execute()["files"]
 
     def list_all_drives(self) -> List[DriveFileJson]:
@@ -314,7 +326,11 @@ class DriveAPI:
         return query.execute()["drives"]
 
     def list_files_in_folder(
-        self, folder_id: str, fields: str = "files (id, name)", **kwargs
+        self,
+        folder_id: str,
+        fields: str = "files (id, name)",
+        all_drives: bool = True,
+        **kwargs,
     ) -> List[DriveFileJson]:
         """
         List all files in a gdrive folder with given `folder_id`.
@@ -331,7 +347,11 @@ class DriveAPI:
         assert self.is_folder(folder_id), "Selected file is not a folder"
 
         query = file_browser.list(
-            q=f"'{folder_id}' in parents", fields=fields, **kwargs
+            q=f"'{folder_id}' in parents",
+            fields=fields,
+            supportsAllDrives=all_drives,
+            includeItemsFromAllDrives=all_drives,
+            **kwargs,
         )
         return query.execute()["files"]
 
