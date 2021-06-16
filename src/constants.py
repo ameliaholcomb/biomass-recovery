@@ -44,3 +44,11 @@ DEFAULT_LOG_LEVEL = logging.DEBUG  # verbose logging per default
 # ---------------- PROJECT CONSTANTS ----------------
 # Coordinate reference systems (crs)
 WGS84 = "EPSG:4326"  # WGS84 standard crs (latitude, longitude)
+
+
+# ---------------- DATABASE CONSTANTS ----------------
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_CONFIG = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
