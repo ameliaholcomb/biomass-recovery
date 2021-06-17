@@ -8,45 +8,6 @@ library("stringr") # for string processing routines
 # Fix random seed
 set.seed(32456)
 
-# Implement Longo formula
-longo_formula <- function(z) {
-    zmean <- mean(z)
-
-    # TODO: Figure out which kurtosis to use (compare python, Longo vals)
-    zkurt <- e1071::kurtosis(z)
-    zquantiles <- stats::quantile(z, c(.05, .10, 1.))
-    ziqr <- stats::IQR(z)
-
-    # Yet another definition of kurtosis?
-    # n <- length(z)
-    # zkurt <- n * sum( (z-zmean)^4 ) / sum( (z - zmean)^2 )^2
-
-    # For debugging:
-    # print(mean ^ 2.02)
-    # print(zkurt)
-    # print(quantiles[["5%"]] ^ 0.11)
-    # print(quantiles[["10%"]] ^ -0.32)
-
-    longo_val <- (0.20
-    * zmean^2.02
-        * zkurt^0.66
-        * zquantiles[["5%"]]^0.11
-        * zquantiles[["10%"]]^-0.32
-        * zquantiles[["100%"]]^-0.82
-        * ziqr^0.50
-    )
-
-    # Note: this is needed for cases where the 5% quantile is 0 and the 10% quantile
-    #  is 0 as well. In this case the result will be NAN. This happens in open areas
-    #  without forest cover
-    if (is.na(longo_val)) {
-        longo_val <- 0
-    }
-
-
-    list(longo_val)
-}
-
 check_las_file_integrity <- function(las, out_path) {
     print("Checking LAS file integrity.")
     check_result <- capture.output(lidR::las_check(las))
