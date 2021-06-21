@@ -23,7 +23,7 @@ filter_noise <- function(las, sensitivity = 1.1, grid_size = 10) {
         # Here the input 'las' will a LAScluster
 
         las <- lidR::readLAS(las) # Read the LAScluster
-        if (is.empty(las)) {
+        if (lidR::is.empty(las)) {
             return(NULL)
         } # Exit early for empty chunks (needed to make it work, see documentation)
 
