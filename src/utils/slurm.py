@@ -163,7 +163,7 @@ def sbatch_header(
         )
 
     batch_template += f"#SBATCH --output={output_file_pattern}\n"
-    batch_template += f"#SBATCH --output={error_file_pattern}\n"
+    batch_template += f"#SBATCH --error={error_file_pattern}\n"
 
     if node_constraint:
         if not node_constraint in ALLOWED_NODE_CONSTRAINTS:
