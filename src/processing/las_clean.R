@@ -1,61 +1,60 @@
 OPT_FILTER_QUANTILE <- 0.95
 
-# Function to filter noise (S3 dispatch)
-filter_noise <- function(las, ...) {
-    UseMethod("filter_noise", las)
-}
+filter_noise <- function(las, sensitivity = 1.1, grid_size = 10) {
+    if (is(las, "LAS")) {
+        # Construct grid of quantile to use for filtering
+        filter <- lidR::grid_metrics(las,
+            func = ~ stats::quantile(Z, probs = OPT_FILTER_QUANTILE),
+            grid_size
+        )
 
-filter_noise.LAS <- function(las, sensitivity, grid_size = 10) {
+        # Filter points which are higher than sensitivity * filter_quantile
+        las <- lidR::merge_spatial(las, filter, "filter")
+        las <- lidR::filter_poi(las, Z < filter * sensitivity)
+        # Remove temporary filter_quantile column
+        las$filter <- NULL
 
-    # Construct grid of quantile to use for filtering
-    filter_quantile <- lidR::grid_metrics(las,
-        func = ~ stats::quantile(Z, probs = OPT_FILTER_QUANTILE),
-        grid_size
-    )
+        # Filter points which are lower than the ground
+        las <- lidR::filter_poi(las, Z >= 0)
+        return(las)
+    }
 
-    # Filter points which are higher than sensitivity * filter_quantile
-    las <- lidR::merge_spatial(las, filter_quantile, "filter_quantile")
-    las <- lidR::filter_poi(las, Z < filter_quantile * sensitivity)
-    # Remove temporary filter_quantile column
-    las$filter_quantile <- NULL
+    if (is(las, "LAScluster")) {
+        # Here the input 'las' will a LAScluster
 
-    # Filter points which are lower than the ground
-    las <- lidR::filter_poi(las, Z >= 0)
-    return(las)
-}
+        las <- lidR::readLAS(las) # Read the LAScluster
+        if (is.empty(las)) {
+            return(NULL)
+        } # Exit early for empty chunks (needed to make it work, see documentation)
 
-filter_noise.LAScluster <- function(las, sensitivity, grid_size = 10) {
-    # The function is automatically fed with LAScluster objects
-    # Here the input 'las' will a LAScluster
+        # Filter the noise
+        las <- filter_noise(las,
+            sensitivity = sensitivity,
+            grid_size = grid_size
+        )
+        # Remove buffer before returning
+        las <- lidR::filter_poi(las, buffer == 0)
+        # Return filtered point cloud
+        return(las)
+    }
 
-    las <- lidR::readLAS(las) # Read the LAScluster
-    if (is.empty(las)) {
-        return(NULL)
-    } # Exit early for empty chunks (needed to make it work, see documentation)
+    if (is(las, "LAScatalog")) {
+        lidR::opt_select(las) <- "*" # Do not respect the select argument by overwriting it
 
-    # Filter the noise
-    las <- lidR::filter_noise(las,
-        sensitivity = sensitivity,
-        grid_size = grid_size
-    )
-    # Remove buffer before returning
-    las <- lidR::filter_poi(las, buffer == 0)
-    # Return filtered point cloud
-    return(las)
-}
+        options <- list(
+            need_output_file = FALSE, # Throw an error if no output template is provided
+            need_buffer = TRUE, # Throw an error if buffer is 0
+            automerge = TRUE, # Automatically merge the output list (here into a LAScatalog)
+            drop_null = TRUE # Automatically drop empty tiles
+        )
 
-filter_noise.LAScatalog <- function(las, sensitivity, grid_size = 10) {
-    lidR::opt_select(las) <- "*" # Do not respect the select argument by overwriting it
+        output <- lidR::catalog_apply(las, filter_noise,
+            sensitivity = sensitivity,
+            grid_size = grid_size,
+            .options = options
+        )
+        return(output)
+    }
 
-    options <- list(
-        need_output_file = TRUE, # Throw an error if no output template is provided
-        need_buffer = TRUE, # Throw an error if buffer is 0
-        automerge = TRUE
-    ) # Automatically merge the output list (here into a LAScatalog)
-
-    lidR::catalog_apply(las, filter_noise,
-        sensitivity = sensitivity,
-        grid_size = grid_size,
-        .options = options
-    )
+    stop("Invalid input")
 }
