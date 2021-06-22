@@ -328,7 +328,7 @@ class DriveAPI:
     def list_files_in_folder(
         self,
         folder_id: str,
-        fields: str = "files (id, name)",
+        fields: str = "files (id, name), nextPageToken",
         all_drives: bool = True,
         **kwargs,
     ) -> List[DriveFileJson]:
@@ -337,7 +337,10 @@ class DriveAPI:
         Args:
             folder_id (str): The id of the folder
             fields (str, optional): The fields to list. Possible values can be taken
-            from the gdrive api v3 documentation. Defaults to "files (id, name)".
+                from the gdrive api v3 documentation.
+                Defaults to "files (id, name), nextPageToken".
+            all_drives(bool, optional): Whether to look for the folder in all drives
+                (i.e. including Team drives and shared drives). Defaults to True.
         Returns:
             List[dict]: A list of all the files in the given folder.
         """
@@ -351,9 +354,27 @@ class DriveAPI:
             fields=fields,
             supportsAllDrives=all_drives,
             includeItemsFromAllDrives=all_drives,
+            pageSize=1000,
             **kwargs,
         )
-        return query.execute()["files"]
+
+        response = query.execute()
+        files = response["files"]
+        while "nextPageToken" in response.keys():
+            logger.debug("Found nextPageToken. Requesting next page of results.")
+            query = file_browser.list(
+                q=f"'{folder_id}' in parents",
+                fields=fields,
+                supportsAllDrives=all_drives,
+                includeItemsFromAllDrives=all_drives,
+                pageToken=response["nextPageToken"],
+                pageSize=1000,
+                **kwargs,
+            )
+            response = query.execute()
+            files += response["files"]
+
+        return files
 
     @staticmethod
     def _metadata_to_query_string(
