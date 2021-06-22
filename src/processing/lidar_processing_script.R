@@ -84,6 +84,7 @@ t0 <- Sys.time()
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
 
+# Parse and verify inputs
 if (is.null(opt$lidar_path)) {
     print_help(opt_parser)
     stop("At least one argument must be supplied (lidar path).", call. = FALSE)
@@ -103,6 +104,8 @@ write(paste("\n", t1, ": ... Loading scripts ...\n"), stdout())
 r_script_path <- "/home/users/svm/Code/gedi_biomass_mapping/src/processing/"
 las_clean_path <- paste0(r_script_path, "las_clean.R")
 source(las_clean_path)
+las_indexing_path <- paste0(r_script_path, "las_indexing.R")
+source(las_indexing_path)
 
 # Load catalog
 t2 <- Sys.time()
@@ -110,11 +113,22 @@ write(paste("\n", t2, ": ... Reading in catalog ...\n"), stdout())
 ctg <- lidR::readLAScatalog(opt$lidar_path)
 print(ctg)
 
+# Perform check of the input files
 if (opt$perform_check) {
     write(paste("\n", Sys.time(), ": ... Performing check ...\n"), stdout())
     lidR::las_check(ctg, deep = TRUE)
 }
 
+# Set catalog processing parameters
+lidR::opt_select(ctg) <- "*" # Select all variables
+lidR::opt_filter(ctg) <- "" # Do not filter any points
+lidR::opt_chunk_size(ctg) <- opt$chunk_size # Process by original files
+lidR::opt_chunk_buffer(ctg) <- opt$buffer # Use a buffer of 50 m
+lidR::opt_laz_compression(ctg) <- opt$compress_intermediates # Save output files in compressed format
+lidR::opt_progress(ctg) <- TRUE # Show progress
+lidR::opt_stop_early(ctg) <- FALSE # Continue upon errors
+
+# Summarise processing options and write to output
 write(
     paste(
         "\nFiles:", length(ctg$filename),
@@ -130,20 +144,10 @@ write(
     ),
     stdout()
 )
-
-# Set catalog processing parameters
-lidR::opt_select(ctg) <- "*" # Select all variables
-lidR::opt_filter(ctg) <- "" # Do not filter any points
-lidR::opt_chunk_size(ctg) <- opt$chunk_size # Process by original files
-lidR::opt_chunk_buffer(ctg) <- opt$buffer # Use a buffer of 50 m
-lidR::opt_laz_compression(ctg) <- opt$compress_intermediates # Save output files in compressed format
-lidR::opt_progress(ctg) <- TRUE # Show progress
-lidR::opt_stop_early(ctg) <- FALSE # Continue upon errors
-
-# Summarise processing options
 summary(ctg)
 
-# Step 1: Classify ground
+
+# Step 1: Classify ground ===================================================
 t3 <- Sys.time()
 write(paste("\n", t3, ": ... Classifying ground ...\n"), stdout())
 
@@ -160,10 +164,14 @@ if (opt$save_intermediates) {
     )
 }
 
+# Ensure files are spatially indexed to greatly speed up computations
+ensure_lax_index(ctg, verbose = TRUE)
+# Perform ground classification with cloth simulation function
 ctg <- lidR::classify_ground(ctg,
     algorithm = lidR::csf(),
     last_returns = TRUE
 )
+ensure_lax_index(ctg, verbose = TRUE)
 
 t4 <- Sys.time()
 write(
@@ -172,7 +180,7 @@ write(
 )
 
 
-# Step 2: Perform height normalisation
+# Step 2: Perform height normalisation ======================================
 write(paste("\n", t4, ": ... Normalising heights ...\n"), stdout())
 
 if (opt$save_intermediates) {
@@ -187,6 +195,10 @@ if (opt$save_intermediates) {
         tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
     )
 }
+
+# Ensure files are spatially indexed to greatly speed up computations
+ensure_lax_index(ctg, verbose = TRUE)
+# Normalise heights
 ctg <- lidR::normalize_height(ctg, algorithm = lidR::tin())
 
 t5 <- Sys.time()
@@ -196,7 +208,7 @@ write(
 )
 
 
-# Step 3: Filter noise
+# Step 3: Filter noise ======================================================
 write(paste("\n", t5, ": ... Filtering noise ...\n"), stdout())
 
 lidR::opt_output_files(ctg) <- paste0(
@@ -211,7 +223,8 @@ lidR::opt_laz_compression(ctg) <- TRUE # compress output files
 
 # Set reference filter quantile
 OPT_FILTER_QUANTILE <- opt$filter_quantile
-
+# Ensure files are spatially indexed to greatly speed up computations
+ensure_lax_index(ctg, verbose = TRUE)
 # Perform noise filtering
 ctg <- filter_noise(ctg,
     sensitivity = opt$filter_sensitivity,
