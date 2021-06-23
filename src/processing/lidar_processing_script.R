@@ -72,6 +72,12 @@ option_list <- list(
         help = "Grid size at which the filter quantile will be computed",
         metavar = "number"
     ),
+    make_option(c("--classify_ground"),
+        type = "logical",
+        default = TRUE,
+        help = "Whether to classify the ground. If FALSE, uses existing Classifiation.",
+        metavar = "bool"
+    ),
     make_option(c("--seed"),
         type = "integer",
         default = 32456,
@@ -80,7 +86,19 @@ option_list <- list(
     )
 )
 
-t0 <- Sys.time()
+# Import custom scripts
+r_script_path <- "/home/users/svm/Code/gedi_biomass_mapping/src/processing/"
+timestamp_path <- paste0(r_script_path, "timestamp.R")
+source(timestamp_path)
+las_clean_path <- paste0(r_script_path, "las_clean.R")
+source(las_clean_path)
+las_indexing_path <- paste0(r_script_path, "las_indexing.R")
+source(las_indexing_path)
+
+# Create first timestamp
+tmp_ <- timestamp(write_output = FALSE)
+
+# Parse arguments
 opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
 
@@ -98,18 +116,11 @@ if (is.null(opt$save_path)) {
 # Fix random seed for stochastic computations
 set.seed(opt$seed)
 
-# Load custom scripts
-t1 <- Sys.time()
-write(paste("\n", t1, ": ... Loading scripts ...\n"), stdout())
-r_script_path <- "/home/users/svm/Code/gedi_biomass_mapping/src/processing/"
-las_clean_path <- paste0(r_script_path, "las_clean.R")
-source(las_clean_path)
-las_indexing_path <- paste0(r_script_path, "las_indexing.R")
-source(las_indexing_path)
-
 # Load catalog
-t2 <- Sys.time()
-write(paste("\n", t2, ": ... Reading in catalog ...\n"), stdout())
+write(paste(
+    "\n", timestamp(write_output = FALSE)$now,
+    ": ... Reading in catalog ...\n"
+), stdout())
 ctg <- lidR::readLAScatalog(opt$lidar_path)
 print(ctg)
 
@@ -148,40 +159,37 @@ summary(ctg)
 
 
 # Step 1: Classify ground ===================================================
-t3 <- Sys.time()
-write(paste("\n", t3, ": ... Classifying ground ...\n"), stdout())
+write(paste("\n", timestamp()$now, ": ... Classifying ground ...\n"), stdout())
 
-if (opt$save_intermediates) {
-    lidR::opt_output_files(ctg) <- paste0(
-        opt$save_path,
-        "/csf_ground/",
-        opt$save_prefix,
-        "{ID}_{XLEFT}_{YBOTTOM}"
+if (opt$classify_ground) {
+    if (opt$save_intermediates) {
+        lidR::opt_output_files(ctg) <- paste0(
+            opt$save_path,
+            "/csf_ground/",
+            opt$save_prefix,
+            "{ID}_{XLEFT}_{YBOTTOM}"
+        )
+    } else {
+        lidR::opt_output_files(ctg) <- paste0(
+            tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
+        )
+    }
+
+    # Ensure files are spatially indexed to greatly speed up computations
+    ensure_lax_index(ctg, verbose = TRUE)
+    # Perform ground classification with cloth simulation function
+    ctg <- lidR::classify_ground(ctg,
+        algorithm = lidR::csf(),
+        last_returns = TRUE
     )
 } else {
-    lidR::opt_output_files(ctg) <- paste0(
-        tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
-    )
+    write("Using pre-classified ground.")
 }
 
-# Ensure files are spatially indexed to greatly speed up computations
-ensure_lax_index(ctg, verbose = TRUE)
-# Perform ground classification with cloth simulation function
-ctg <- lidR::classify_ground(ctg,
-    algorithm = lidR::csf(),
-    last_returns = TRUE
-)
-ensure_lax_index(ctg, verbose = TRUE)
-
-t4 <- Sys.time()
-write(
-    paste("\n Time taken:", as.numeric(t4 - t3, units = "secs"), "secs\n"),
-    stdout()
-)
 
 
 # Step 2: Perform height normalisation ======================================
-write(paste("\n", t4, ": ... Normalising heights ...\n"), stdout())
+write(paste("\n", timestamp()$now, ": ... Normalising heights ...\n"), stdout())
 
 if (opt$save_intermediates) {
     lidR::opt_output_files(ctg) <- paste0(
@@ -201,15 +209,9 @@ ensure_lax_index(ctg, verbose = TRUE)
 # Normalise heights
 ctg <- lidR::normalize_height(ctg, algorithm = lidR::tin())
 
-t5 <- Sys.time()
-write(
-    paste("\n Time taken:", as.numeric(t5 - t4, units = "secs"), "secs\n"),
-    stdout()
-)
-
 
 # Step 3: Filter noise ======================================================
-write(paste("\n", t5, ": ... Filtering noise ...\n"), stdout())
+write(paste("\n", timestamp()$now, ": ... Filtering noise ...\n"), stdout())
 
 lidR::opt_output_files(ctg) <- paste0(
     opt$save_path,
@@ -231,17 +233,6 @@ ctg <- filter_noise(ctg,
     grid_size = opt$filter_gridsize
 )
 
-t6 <- Sys.time()
-write(
-    paste("\n Time taken:", as.numeric(t6 - t5, units = "secs"), "secs\n"),
-    stdout()
-)
-write(
-    paste(
-        "\n Total time elapsed:",
-        as.numeric(t6 - t0, units = "secs"),
-        "secs\n"
-    ),
-    stdout()
-)
+tmp_ <- timestamp()
+tmp_ <- time_since_first_timestamp(write_output = TRUE)
 write("Success.", stdout())
