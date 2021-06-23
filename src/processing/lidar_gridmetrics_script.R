@@ -153,7 +153,7 @@ if (file.exists(save_name)) {
     if (!opt$overwrite) {
         stop("File exists already.")
     } else {
-        write("File exists. Overwriting.")
+        write("File exists. Overwriting.", stdout())
     }
 }
 
