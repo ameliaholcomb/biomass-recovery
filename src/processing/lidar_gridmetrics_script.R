@@ -90,7 +90,11 @@ opt_parser <- OptionParser(option_list = option_list)
 opt <- parse_args(opt_parser)
 ALLOWED_METRICS <- list(
     point_density = ~ length(Z) / opt$gridsize^2,
-    npoints = ~ length(Z),
+    pulse_density = ~ length(Z) / opt$gridsize^2, # NB: Sets an additional filter below
+    ground_point_density = ~ length(Z) / opt$gridsize^2, # NB: Sets an additional filter below
+    n_points = ~ length(Z),
+    n_pulses = ~ length(Z), # NB: Sets an additional filter below
+    n_ground_points = ~ length(Z), # NB: Sets an additional filter below
     max = ~ max(Z),
     standard_dev = ~ sd(Z),
     mask = ~ !is.na(max(Z)),
@@ -197,11 +201,21 @@ write(paste(
     "at", opt$gridsize, "m resolution ...\n"
 ), stdout())
 
+# Set filter for certain metrics
+if (opt$metric %in% c("pulse_density", "n_pulses")) {
+    filter <- ~ ReturnNumber == 1L
+} else if (opt$metric %in% c("ground_point_density", "n_ground_points")) {
+    filter <- ~ Classification == lidR::LASGROUND
+} else {
+    filter <- NULL
+}
 
+# Compute grid metrics with specified parameters
 lidR::grid_metrics(
     las = ctg,
     func = ALLOWED_METRICS[[opt$metric]],
-    res = opt$gridsize
+    res = opt$gridsize,
+    filter = filter
 )
 warnings()
 
