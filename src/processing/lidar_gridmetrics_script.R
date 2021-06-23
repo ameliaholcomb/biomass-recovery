@@ -147,9 +147,9 @@ save_name <- paste0(
     opt$save_path,
     "/grid_metrics/",
     opt$save_prefix,
-    opt$metric, opt$quantile, "_", opt$gridsize, "m"
+    opt$metric, opt$quantile, "_", opt$gridsize, "m.tif"
 )
-if (file.exists(paste0(save_name, ".tif"))) {
+if (file.exists(save_name)) {
     if (!opt$overwrite) {
         stop("File exists already.")
     } else {
@@ -171,14 +171,13 @@ if (opt$check_index) {
 }
 
 # Set catalog processing parameters
-ctg@output_options$drivers$Raster$param$overwrite <- opt$overwrite # Set overwrite flag
 lidR::opt_select(ctg) <- "*" # Select all variables
 lidR::opt_filter(ctg) <- "" # Do not filter any points
 lidR::opt_chunk_size(ctg) <- opt$chunk_size # Process by original files
 lidR::opt_chunk_buffer(ctg) <- max(opt$buffer, opt$gridsize) # Use a buffer
 lidR::opt_progress(ctg) <- TRUE # Show progress
 lidR::opt_stop_early(ctg) <- FALSE # Continue upon errors
-lidR::opt_output_files(ctg) <- save_name
+lidR::opt_output_files(ctg) <- ""
 
 # Summarise processing options and write to output
 write(
@@ -211,12 +210,13 @@ if (opt$metric %in% c("pulse_density", "n_pulses")) {
 }
 
 # Compute grid metrics with specified parameters
-lidR::grid_metrics(
+out <- lidR::grid_metrics(
     las = ctg,
     func = ALLOWED_METRICS[[opt$metric]],
     res = opt$gridsize,
     filter = filter
 )
+raster::writeRaster(out[[1]], filename = save_name, overwrite = opt$overwrite)
 warnings()
 
 tmp_ <- timestamp()
