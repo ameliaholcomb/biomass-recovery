@@ -16,7 +16,7 @@ option_list <- list(
         metavar = "character"
     ),
     make_option(c("--gridsize"),
-        type = "integer",
+        type = "double",
         default = 10,
         help = "Grid size at which the metric will be computed",
         metavar = "number"

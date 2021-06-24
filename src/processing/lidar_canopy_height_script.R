@@ -10,7 +10,7 @@ option_list <- list(
         metavar = "character"
     ),
     make_option(c("--gridsize"),
-        type = "integer",
+        type = "double",
         default = 2,
         help = "Grid size at which the metric will be computed",
         metavar = "number"
@@ -149,8 +149,8 @@ write(
 
 # Apply function to catalog in gridded fashion
 write(paste(
-    "\n", timestamp()$now, ": ... Calculating", opt$metric, opt$quantile,
-    "at", opt$gridsize, "m resolution ...\n"
+    "\n", timestamp()$now, ": ... Calculating canopy_height at",
+    opt$gridsize, "m resolution ...\n"
 ), stdout())
 
 # Compute grid canopy height model with specified parameters
