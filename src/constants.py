@@ -45,6 +45,19 @@ DEFAULT_LOG_LEVEL = logging.DEBUG  # verbose logging per default
 # Coordinate reference systems (crs)
 WGS84 = "EPSG:4326"  # WGS84 standard crs (latitude, longitude)
 
+WGS84_UTM18S = "EPSG:32718"  # https://epsg.io/32718
+WGS84_UTM19S = "EPSG:32719"  # https://epsg.io/32719
+WGS84_UTM20S = "EPSG:32720"  # https://epsg.io/32720
+WGS84_UTM21S = "EPSG:32721"  # https://epsg.io/32721
+WGS84_UTM22S = "EPSG:32722"  # https://epsg.io/32722
+WGS84_UTM23S = "EPSG:32723"  # https://epsg.io/32723
+
+SIGRAS2000_UTM18S = "EPSG:31978"  # https://epsg.io/31978
+SIGRAS2000_UTM19S = "EPSG:31979"  # https://epsg.io/31979
+SIGRAS2000_UTM20S = "EPSG:31980"  # https://epsg.io/31980
+SIGRAS2000_UTM21S = "EPSG:31981"  # https://epsg.io/31981
+SIGRAS2000_UTM22S = "EPSG:31982"  # https://epsg.io/31982
+SIGRAS2000_UTM23S = "EPSG:31983"  # https://epsg.io/31983
 
 # ---------------- DATABASE CONSTANTS ----------------
 DB_HOST = os.getenv("DB_HOST")
