@@ -6,20 +6,17 @@ opt_densities = {
     "colorbar": True,
     "tools": ["hover"],
     "cmap": "magma",
-    "cnorm": "linear",
 }
 
 opt_biomass = {
     "colorbar": True,
     "tools": ["hover"],
     "cmap": "kgy_r",
-    "cnorm": "eq_hist",
 }
 
 opt_metrics = {
     "colorbar": True,
     "tools": ["hover"],
-    "cnorm": "eq_hist",
     "cmap": "bgy_r",
 }
 
