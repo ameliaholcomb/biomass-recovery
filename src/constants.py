@@ -44,6 +44,7 @@ DEFAULT_LOG_LEVEL = logging.DEBUG  # verbose logging per default
 # ---------------- PROJECT CONSTANTS ----------------
 # Coordinate reference systems (crs)
 WGS84 = "EPSG:4326"  # WGS84 standard crs (latitude, longitude)
+WEBMERCATOR = "EPSG:3857"
 
 WGS84_UTM18S = "EPSG:32718"  # https://epsg.io/32718
 WGS84_UTM19S = "EPSG:32719"  # https://epsg.io/32719
