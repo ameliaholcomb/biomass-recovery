@@ -14,6 +14,12 @@ opt_biomass = {
     "cmap": "kgy_r",
 }
 
+opt_difference = {
+    "colorbar": True,
+    "tools": ["hover"],
+    "cmap": "bkr",
+}
+
 opt_metrics = {
     "colorbar": True,
     "tools": ["hover"],
@@ -22,6 +28,8 @@ opt_metrics = {
 
 legend = {
     "longo_biomass": dict(name="Longo ACD", unit="kgC/m2"),
+    "longo_tch_biomass": dict(name="Longo TCH ACD", unit="kgC/m2"),
+    "asner_tch_biomass": dict(name="Asner TCH ACD", unit="MgC/ha"),
     "max": dict(name="Max-height", unit="m"),
     "mean": dict(name="Mean-height", unit="m"),
     "interquartile_range": dict(name="IQR-height", unit="m"),
@@ -38,4 +46,5 @@ legend = {
     "n_points": dict(name="No. points", unit="1"),
     "n_pulses": dict(name="No. pulses", unit="1"),
     "n_ground_points": dict(name="No. ground points", unit="1"),
+    "acd_difference": dict(name="Difference", unit="kgC/m2"),
 }
