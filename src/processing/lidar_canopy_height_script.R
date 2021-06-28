@@ -17,9 +17,11 @@ option_list <- list(
     ),
     make_option(c("--subcircle"),
         type = "double",
-        default = 0.2,
-        help = "Radius of the Lidar beam to assume for a more realistic simulation of beam
-            width for the canopy height model.",
+        default = 0.15,
+        help = "Radius of the Lidar beam to assume for a more realistic
+         simulation of beam width for the canopy height model. The default
+         value of 0.15m (=15cm) was selected because the EBA data was chosen
+         to have a beam diameter of around 30 cm.",
         metavar = "number"
     ),
     make_option(c("-o", "--save_path"),
@@ -129,8 +131,18 @@ lidR::opt_stop_early(ctg) <- FALSE # Continue upon errors
 lidR::opt_output_files(ctg) <- ""
 
 # Summarise processing options and write to output
+# NB: threshodlds:
+#  Thresholds at which to create a triangulated surface model. Models will be
+#  stacked to produce a pit-free canopy height model
 thresholds <- c(0, 2, 5, 10, 15, 25, 35, 45)
-max_edges <- c(8, 2)
+
+# NB: max_edges:
+#  first number: max edge length at for interpolation between all points
+#   setting a too low value can result in lots of NaN values.
+#  second number: max edge length between triangulated models at higher
+#   heights
+max_edges <- c(20, 2)
+
 write(
     paste(
         "\nFiles:", length(ctg$filename),
