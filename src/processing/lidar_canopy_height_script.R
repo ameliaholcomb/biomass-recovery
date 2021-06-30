@@ -150,9 +150,9 @@ write(
         "\nBuffer:", max(opt$buffer, opt$gridsize),
         "\nSave path:", opt$save_path,
         "\nGrid size:", opt$gridsize,
-        "\nThresholds:", list(thresholds), # TODO: fix display of list
+        "\nThresholds:", list(thresholds),
         "\nSubcircle:", opt$subcircle,
-        "\nMax edges:", list(max_edges), # TODO: fix display of list
+        "\nMax edges:", list(max_edges),
         "\nSeed:", opt$seed,
         "\n\n"
     ),
