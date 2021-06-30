@@ -20,7 +20,12 @@ filter_noise <- function(las, sensitivity = 1.1, grid_size = 10) {
     }
 
     if (is(las, "LAScluster")) {
-        # Here the input 'las' will a LAScluster
+        # Skip filter computations if file already exists
+        if (file.exists(paste0(las@save, ".las"))) {
+            return(lidR::readLAS(paste0(las@save, ".las")))
+        } else if (file.exists(paste0(las@save, ".laz"))) {
+            return(lidR::readLAS(paste0(las@save, ".laz")))
+        }
 
         las <- lidR::readLAS(las) # Read the LAScluster
         if (lidR::is.empty(las)) {
