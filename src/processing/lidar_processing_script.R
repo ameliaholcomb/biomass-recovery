@@ -21,6 +21,12 @@ option_list <- list(
         help = "Prefix to use when saving files",
         metavar = "character"
     ),
+    make_option(c("--save_pattern"),
+        type = "character",
+        default = "{XLEFT}_{YBOTTOM}",
+        help = "Pattern to use for saving files",
+        metavar = "character"
+    ),
     make_option(c("--perform_check"),
         type = "logical",
         default = TRUE,
@@ -72,10 +78,23 @@ option_list <- list(
         help = "Grid size at which the filter quantile will be computed",
         metavar = "number"
     ),
-    make_option(c("--classify_ground"),
+    make_option(c("--perform_classification"),
         type = "logical",
         default = TRUE,
-        help = "Whether to classify the ground. If FALSE, uses existing Classifiation.",
+        help = "Whether to classify the ground.
+         If FALSE, uses existing Classifiation.",
+        metavar = "bool"
+    ),
+    make_option(c("--perform_normalisation"),
+        type = "logical",
+        default = TRUE,
+        help = "Whether to normalise the data.",
+        metavar = "bool"
+    ),
+    make_option(c("--perform_filter"),
+        type = "logical",
+        default = TRUE,
+        help = "Whether to filter the data.",
         metavar = "bool"
     ),
     make_option(c("--seed"),
@@ -135,7 +154,7 @@ lidR::opt_select(ctg) <- "*" # Select all variables
 lidR::opt_filter(ctg) <- "" # Do not filter any points
 lidR::opt_chunk_size(ctg) <- opt$chunk_size # Process by original files
 lidR::opt_chunk_buffer(ctg) <- opt$buffer # Use a buffer of 50 m
-lidR::opt_laz_compression(ctg) <- opt$compress_intermediates # Save output files in compressed format
+lidR::opt_laz_compression(ctg) <- opt$compress_intermediates # Save as .laz
 lidR::opt_progress(ctg) <- TRUE # Show progress
 lidR::opt_stop_early(ctg) <- FALSE # Continue upon errors
 
@@ -161,13 +180,13 @@ summary(ctg)
 # Step 1: Classify ground ===================================================
 write(paste("\n", timestamp()$now, ": ... Classifying ground ...\n"), stdout())
 
-if (opt$classify_ground) {
+if (opt$perform_classification) {
     if (opt$save_intermediates) {
         lidR::opt_output_files(ctg) <- paste0(
             opt$save_path,
             "/csf_ground/",
             opt$save_prefix,
-            "{ID}_{XLEFT}_{YBOTTOM}"
+            opt$save_pattern
         )
     } else {
         lidR::opt_output_files(ctg) <- paste0(
@@ -178,6 +197,8 @@ if (opt$classify_ground) {
     # Ensure files are spatially indexed to greatly speed up computations
     ensure_lax_index(ctg, verbose = TRUE)
     # Perform ground classification with cloth simulation function
+    #  NOTE: Partial processing:
+    #  https://gis.stackexchange.com/questions/358453/partially-processing-a-catalog-with-an-extent-in-lidr
     ctg <- lidR::classify_ground(ctg,
         algorithm = lidR::csf(),
         last_returns = TRUE
@@ -191,47 +212,55 @@ if (opt$classify_ground) {
 # Step 2: Perform height normalisation ======================================
 write(paste("\n", timestamp()$now, ": ... Normalising heights ...\n"), stdout())
 
-if (opt$save_intermediates) {
-    lidR::opt_output_files(ctg) <- paste0(
-        opt$save_path,
-        "/normalised/",
-        opt$save_prefix,
-        "{ID}_{XLEFT}_{YBOTTOM}"
-    )
-} else {
-    lidR::opt_output_files(ctg) <- paste0(
-        tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
-    )
-}
+if (opt$perform_normalisation) {
+    if (opt$save_intermediates) {
+        lidR::opt_output_files(ctg) <- paste0(
+            opt$save_path,
+            "/normalised/",
+            opt$save_prefix,
+            opt$save_pattern
+        )
+    } else {
+        lidR::opt_output_files(ctg) <- paste0(
+            tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
+        )
+    }
 
-# Ensure files are spatially indexed to greatly speed up computations
-ensure_lax_index(ctg, verbose = TRUE)
-# Normalise heights
-ctg <- lidR::normalize_height(ctg, algorithm = lidR::tin())
+    # Ensure files are spatially indexed to greatly speed up computations
+    ensure_lax_index(ctg, verbose = TRUE)
+    # Normalise heights
+    ctg <- lidR::normalize_height(ctg, algorithm = lidR::tin())
+} else {
+    write("Skipping normalisation.")
+}
 
 
 # Step 3: Filter noise ======================================================
 write(paste("\n", timestamp()$now, ": ... Filtering noise ...\n"), stdout())
 
-lidR::opt_output_files(ctg) <- paste0(
-    opt$save_path,
-    "/processed/",
-    opt$save_prefix,
-    "{ID}_{XLEFT}_{YBOTTOM}"
-)
-# set buffer to min possible value
-lidR::opt_chunk_buffer(ctg) <- opt$filter_gridsize
-lidR::opt_laz_compression(ctg) <- TRUE # compress output files
+if (opt$perform_filter) {
+    lidR::opt_output_files(ctg) <- paste0(
+        opt$save_path,
+        "/processed/",
+        opt$save_prefix,
+        opt$save_pattern
+    )
+    # set buffer to min possible value
+    lidR::opt_chunk_buffer(ctg) <- opt$filter_gridsize
+    lidR::opt_laz_compression(ctg) <- TRUE # compress output files
 
-# Set reference filter quantile
-OPT_FILTER_QUANTILE <- opt$filter_quantile
-# Ensure files are spatially indexed to greatly speed up computations
-ensure_lax_index(ctg, verbose = TRUE)
-# Perform noise filtering
-ctg <- filter_noise(ctg,
-    sensitivity = opt$filter_sensitivity,
-    grid_size = opt$filter_gridsize
-)
+    # Set reference filter quantile
+    OPT_FILTER_QUANTILE <- opt$filter_quantile
+    # Ensure files are spatially indexed to greatly speed up computations
+    ensure_lax_index(ctg, verbose = TRUE)
+    # Perform noise filtering
+    ctg <- filter_noise(ctg,
+        sensitivity = opt$filter_sensitivity,
+        grid_size = opt$filter_gridsize
+    )
+} else {
+    write("Skipping noise-filter.")
+}
 
 tmp_ <- timestamp()
 tmp_ <- time_since_first_timestamp(write_output = TRUE)
