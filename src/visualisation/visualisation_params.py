@@ -28,9 +28,12 @@ opt_metrics = {
 }
 
 legend = {
-    "longo_biomass": dict(name="Longo formula ACD", unit="kgC/m2"),
-    "longo_tch_biomass": dict(name="Longo TCH model ACD", unit="kgC/m2"),
-    "asner_tch_biomass": dict(name="Asner TCH model ACD", unit="MgC/ha"),
+    "longo_biomass": dict(name="Longo 2016 formula ACD", unit="kgC/m2"),
+    "longo2016_tch_biomass": dict(name="Longo 2016 ACD from TCH", unit="kgC/m2"),
+    "asner2014_tch_biomass": dict(name="Asner 2014 ACD from TCH", unit="kgC/m2"),
+    "asner2014_tch_colombia_biomass": dict(
+        name="Asner 2014 ACD (Colombia-model) from TCH", unit="kgC/m2"
+    ),
     "max": dict(name="Max-height", unit="m"),
     "mean": dict(name="Mean-height", unit="m"),
     "interquartile_range": dict(name="IQR-height", unit="m"),
