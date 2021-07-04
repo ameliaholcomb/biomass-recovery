@@ -140,19 +140,24 @@ option_list <- list(
         default = 94153,
         help = "Random seed for stochastic computations",
         metavar = "number"
+    ),
+    make_option(c("--height_map_path"),
+        type = "character",
+        default = "/gws/nopw/j04/forecol/data/Amazon_height_map/rfHeightRasterCor80v14042020.tif",
+        help = "Path to a heightmap of maximum heights to
+         filter too high values.",
+        metavar = "character"
     )
 )
 
 # Import custom scripts
 R_SCRIPT_PATH <- "/home/users/svm/Code/gedi_biomass_mapping/src/processing/"
-HEIGHT_MAP_PATH <- "/gws/nopw/j04/forecol/data/Amazon_height_map/rfHeightRasterCor80v14042020.tif"
 
-timestamp_path <- paste0(R_SCRIPT_PATH, "timestamp.R")
-source(timestamp_path)
-las_clean_path <- paste0(R_SCRIPT_PATH, "las_clean.R")
-source(las_clean_path)
-las_indexing_path <- paste0(R_SCRIPT_PATH, "las_indexing.R")
-source(las_indexing_path)
+source(paste0(R_SCRIPT_PATH, "timestamp.R"))
+source(paste0(R_SCRIPT_PATH, "las_clean.R"))
+source(paste0(R_SCRIPT_PATH, "las_indexing.R"))
+source(paste0(R_SCRIPT_PATH, "las_utils.R"))
+
 
 # Create first timestamp
 tmp_ <- timestamp(write_output = FALSE)
@@ -222,23 +227,33 @@ if (opt$perform_decimation) {
         paste("\n", timestamp()$now, ": ... Decimating pointcloud ...\n"),
         stdout()
     )
-    if (opt$save_intermediates) {
-        lidR::opt_output_files(ctg) <- paste0(
-            opt$save_path,
-            "/decimated/",
-            opt$save_pattern
-        )
+    # Set output directory
+    lidR::opt_output_files(ctg) <- paste0(
+        opt$save_path,
+        "/decimated/",
+        opt$save_pattern
+    )
+
+    # Deactivate lidR processing for chunks which are fully
+    #  contained in the files at the output path (unless
+    #  overwrite is TRUE.)
+    if (opt$overwrite) {
+        ctg$processed <- rep(TRUE, length(ctg))
     } else {
-        lidR::opt_output_files(ctg) <- paste0(
-            tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
-        )
+        ctg$processed <- unprocessed_files(ctg)
     }
 
-    if (opt$overwrite || !(file.exists(paste0(opt$save_path, "/decimated/")) &&
-        length(list.files(
-            paste0(opt$save_path, "/decimated/")
-        )) > 0)
-    ) {
+    n_files_to_process <- sum(ctg$processed)
+    n_files_total <- length(ctg)
+    write(
+        paste(
+            "Files to process:", n_files_to_process,
+            "of", n_files_total
+        ),
+        stdout()
+    )
+
+    if (n_files_to_process > 0) {
         # Ensure files are spatially indexed to greatly speed up computations
         ensure_lax_index(ctg, verbose = TRUE)
         # Perform point decimation
@@ -249,10 +264,17 @@ if (opt$perform_decimation) {
                 use_pulse = opt$decimate_by_pulse
             )
         )
-    } else {
-        ctg <- lidR::readLAScatalog(paste0(opt$save_path, "/decimated/"))
+    }
+
+    # Reload the output catalog with same processing options as ctg if
+    # not all files where processed to ensure that all files are included
+    # in the next step.
+    if (n_files_to_process < n_files_total) {
+        write("Reloading catalog", stdout())
+        ctg <- reload_ctg_output(ctg)
     }
 }
+
 
 
 # Step 1: Classify ground ===================================================
@@ -261,27 +283,49 @@ if (opt$perform_classification) {
         paste("\n", timestamp()$now, ": ... Classifying ground ...\n"),
         stdout()
     )
-    if (opt$save_intermediates) {
-        lidR::opt_output_files(ctg) <- paste0(
-            opt$save_path,
-            "/csf_ground/",
-            opt$save_pattern
-        )
+    # Set output path
+    lidR::opt_output_files(ctg) <- paste0(
+        opt$save_path,
+        "/csf_ground/",
+        opt$save_pattern
+    )
+
+    # Deactivate lidR processing for chunks which are fully
+    #  contained in the files at the output path (unless
+    #  overwrite is TRUE.)
+    if (opt$overwrite) {
+        ctg$processed <- rep(TRUE, length(ctg))
     } else {
-        lidR::opt_output_files(ctg) <- paste0(
-            tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
+        ctg$processed <- unprocessed_files(ctg)
+    }
+
+    n_files_to_process <- sum(ctg$processed)
+    n_files_total <- length(ctg)
+    write(
+        paste(
+            "Files to process:", n_files_to_process,
+            "of", n_files_total
+        ),
+        stdout()
+    )
+
+    if (n_files_to_process > 0) {
+        # Ensure files are spatially indexed to greatly speed up computations
+        ensure_lax_index(ctg, verbose = TRUE)
+        # Perform ground classification with cloth simulation function
+        ctg <- lidR::classify_ground(ctg,
+            algorithm = lidR::csf(),
+            last_returns = TRUE
         )
     }
 
-    # Ensure files are spatially indexed to greatly speed up computations
-    ensure_lax_index(ctg, verbose = TRUE)
-    # Perform ground classification with cloth simulation function
-    #  NOTE: Partial processing:
-    #  https://gis.stackexchange.com/questions/358453/partially-processing-a-catalog-with-an-extent-in-lidr
-    ctg <- lidR::classify_ground(ctg,
-        algorithm = lidR::csf(),
-        last_returns = TRUE
-    )
+    # Reload the output catalog with same processing options as ctg if
+    # not all files where processed to ensure that all files are included
+    # in the next step.
+    if (n_files_to_process < n_files_total) {
+        write("Reloading catalog", stdout())
+        ctg <- reload_ctg_output(ctg)
+    }
 } else {
     write("Using pre-classified ground.")
 }
@@ -294,22 +338,46 @@ if (opt$perform_normalisation) {
         paste("\n", timestamp()$now, ": ... Normalising heights ...\n"),
         stdout()
     )
-    if (opt$save_intermediates) {
-        lidR::opt_output_files(ctg) <- paste0(
-            opt$save_path,
-            "/normalised/",
-            opt$save_pattern
-        )
+    # Set output path
+    lidR::opt_output_files(ctg) <- paste0(
+        opt$save_path,
+        "/normalised/",
+        opt$save_pattern
+    )
+
+    # Deactivate lidR processing for chunks which are fully
+    #  contained in the files at the output path (unless
+    #  overwrite is TRUE.)
+    if (opt$overwrite) {
+        ctg$processed <- rep(TRUE, length(ctg))
     } else {
-        lidR::opt_output_files(ctg) <- paste0(
-            tempdir(), "/{ID}_{XLEFT}_{YBOTTOM}"
-        )
+        ctg$processed <- unprocessed_files(ctg)
     }
 
-    # Ensure files are spatially indexed to greatly speed up computations
-    ensure_lax_index(ctg, verbose = TRUE)
-    # Normalise heights
-    ctg <- lidR::normalize_height(ctg, algorithm = lidR::tin())
+    n_files_to_process <- sum(ctg$processed)
+    n_files_total <- length(ctg)
+    write(
+        paste(
+            "Files to process:", n_files_to_process,
+            "of", n_files_total
+        ),
+        stdout()
+    )
+
+    if (n_files_to_process > 0) {
+        # Ensure files are spatially indexed to greatly speed up computations
+        ensure_lax_index(ctg, verbose = TRUE)
+        # Normalise heights
+        ctg <- lidR::normalize_height(ctg, algorithm = lidR::tin())
+    }
+
+    # Reload the output catalog with same processing options as ctg if
+    # not all files where processed to ensure that all files are included
+    # in the next step.
+    if (n_files_to_process < n_files_total) {
+        write("Reloading catalog")
+        ctg <- reload_ctg_output(ctg)
+    }
 } else {
     write("Skipping normalisation.")
 }
@@ -321,48 +389,74 @@ if (opt$perform_filter) {
         paste("\n", timestamp()$now, ": ... Filtering noise ...\n"),
         stdout()
     )
-    if (!is.null(opt$lidar_crs)) {
-        # Load height map
-        height_map <- raster::raster(HEIGHT_MAP_PATH)
-        # Get ALS raster
-        extents <- raster::raster(raster::extent(ctg), crs = opt$lidar_crs)
-        # Transform extents to WGS84
-        extents <- raster::projectExtent(
-            extents,
-            crs = "+proj=longlat +datum=WGS84 +no_defs"
-        )@extent
-        # Crop tree height map values from tree height map
-        height_map <- raster::crop(height_map, extents)
-        # Determine max filter value (either 10% above max value or more
-        #  than 5m, whichever is higher)
-        filter_height <- max(c(
-            height_map@data@max * 1.1,
-            height_map@data@max + 5
-        ))
-        lidR::opt_filter(ctg) <- paste("-drop_z_above", filter_height)
-        write(
-            paste("\nSet max filter height to", filter_height, ".\n"),
-            stdout()
-        )
-    }
+    # Set output path
     lidR::opt_output_files(ctg) <- paste0(
         opt$save_path,
         "/processed/",
         opt$save_pattern
     )
-    # set buffer to min possible value
-    lidR::opt_chunk_buffer(ctg) <- opt$filter_gridsize
-    lidR::opt_laz_compression(ctg) <- TRUE # compress output files
 
-    # Set reference filter quantile
-    OPT_FILTER_QUANTILE <- opt$filter_quantile
-    # Ensure files are spatially indexed to greatly speed up computations
-    ensure_lax_index(ctg, verbose = TRUE)
-    # Perform noise filtering
-    ctg <- filter_noise(ctg,
-        sensitivity = opt$filter_sensitivity,
-        grid_size = opt$filter_gridsize
+    # Deactivate lidR processing for chunks which are fully
+    #  contained in the files at the output path (unless
+    #  overwrite is TRUE.)
+    if (opt$overwrite) {
+        ctg$processed <- rep(TRUE, length(ctg))
+    } else {
+        ctg$processed <- unprocessed_files(ctg)
+    }
+
+    n_files_to_process <- sum(ctg$processed)
+    n_files_total <- length(ctg)
+    write(
+        paste(
+            "Files to process:", n_files_to_process,
+            "of", n_files_total
+        ),
+        stdout()
     )
+
+    if (n_files_to_process > 0) {
+
+        # Activate height filter from height map
+        if (!is.null(opt$lidar_crs)) {
+            # Load height map
+            height_map <- raster::raster(opt$height_map_path)
+            # Get ALS raster
+            extents <- raster::raster(raster::extent(ctg), crs = opt$lidar_crs)
+            # Transform extents to WGS84
+            extents <- raster::projectExtent(
+                extents,
+                crs = "+proj=longlat +datum=WGS84 +no_defs"
+            )@extent
+            # Crop tree height map values from tree height map
+            height_map <- raster::crop(height_map, extents)
+            # Determine max filter value (either 10% above max value or more
+            #  than 5m, whichever is higher)
+            filter_height <- max(c(
+                height_map@data@max * 1.1,
+                height_map@data@max + 5
+            ))
+            lidR::opt_filter(ctg) <- paste("-drop_z_above", filter_height)
+            write(
+                paste("\nSet max filter height to", filter_height, ".\n"),
+                stdout()
+            )
+        }
+
+        # set buffer to min possible value
+        lidR::opt_chunk_buffer(ctg) <- opt$filter_gridsize
+        lidR::opt_laz_compression(ctg) <- TRUE # compress output files
+
+        # Set reference filter quantile
+        OPT_FILTER_QUANTILE <- opt$filter_quantile
+        # Ensure files are spatially indexed to greatly speed up computations
+        ensure_lax_index(ctg, verbose = TRUE)
+        # Perform noise filtering
+        ctg <- filter_noise(ctg,
+            sensitivity = opt$filter_sensitivity,
+            grid_size = opt$filter_gridsize
+        )
+    }
 } else {
     write("Skipping noise-filter.")
 }
