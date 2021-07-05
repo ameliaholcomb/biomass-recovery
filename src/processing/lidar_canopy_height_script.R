@@ -9,6 +9,12 @@ option_list <- list(
          files to be processed as LAScatalog",
         metavar = "character"
     ),
+    make_option(c("--lidar_crs"),
+        type = "character",
+        default = NULL,
+        help = "Proj4 string for the crs of the lidar data.",
+        metavar = "character"
+    ),
     make_option(c("--gridsize"),
         type = "double",
         default = 2,
@@ -66,15 +72,27 @@ option_list <- list(
         default = 32456,
         help = "Random seed for stochastic computations",
         metavar = "number"
+    ),
+    make_option(c("--n_workers"),
+        type = "integer",
+        default = 1L,
+        help = "Number of workers to use",
+        metavar = "number"
+    ),
+    make_option(c("--height_map_path"),
+        type = "character",
+        default = "/gws/nopw/j04/forecol/data/Amazon_height_map/rfHeightRasterCor80v14042020.tif",
+        help = "Path to a heightmap of maximum heights to
+         filter too high values.",
+        metavar = "character"
     )
 )
 
 # Import custom scripts
 r_script_path <- "/home/users/svm/Code/gedi_biomass_mapping/src/processing/"
-timestamp_path <- paste0(r_script_path, "timestamp.R")
-source(timestamp_path)
-las_indexing_path <- paste0(r_script_path, "las_indexing.R")
-source(las_indexing_path)
+source(paste0(r_script_path, "timestamp.R"))
+source(paste0(r_script_path, "las_indexing.R"))
+source(paste0(r_script_path, "las_utils.R"))
 
 # Create first timestamp
 tmp_ <- timestamp(write_output = FALSE)
@@ -114,6 +132,14 @@ write(paste(
     ": ... Reading in catalog ...\n"
 ), stdout())
 ctg <- lidR::readLAScatalog(opt$lidar_path)
+
+# Set up multiprocessing pool if requesting more workers
+if (opt$n_workers > 1L) {
+    n_workers <- get_n_workers(opt$n_workers, length(ctg))
+    future::plan(future::multisession(workers = (n_workers)))
+} else {
+    write("Running in non-parallelised mode.", stdout())
+}
 
 if (opt$check_index) {
     # Ensure files are spatially indexed to greatly speed up computations
@@ -164,6 +190,47 @@ write(paste(
     "\n", timestamp()$now, ": ... Calculating canopy_height at",
     opt$gridsize, "m resolution ...\n"
 ), stdout())
+
+# Activate height filter from height map
+if (!is.null(opt$lidar_crs)) {
+    lidar_crs <- opt$lidar_crs
+} else if (!is.na(raster::crs(ctg))) {
+    lidar_crs <- raster::crs(ctg)
+} else {
+    lidar_crs <- NULL
+}
+
+if (!is.null(lidar_crs)) {
+    # Load height map
+    height_map <- raster::raster(opt$height_map_path)
+    # Get ALS raster
+    extents <- raster::raster(raster::extent(ctg), crs = lidar_crs)
+    # Transform extents to WGS84
+    extents <- raster::projectExtent(
+        extents,
+        crs = raster::crs(height_map)
+    )@extent
+    # Crop tree height map values from tree height map
+    tryCatch(
+        {
+            height_map <- raster::crop(height_map, extents)
+            # Determine max filter value (either 10% above max value or more
+            #  than 5m, whichever is higher)
+            filter_height <- max(c(
+                height_map@data@max * 1.1,
+                height_map@data@max + 5
+            ))
+            lidR::opt_filter(ctg) <- paste("-drop_z_above", filter_height)
+            write(
+                paste("\nSet max filter height to", filter_height, ".\n"),
+                stdout()
+            )
+        },
+        error = function(cond) {
+            write(paste("Could not set max height filter.", cond), stdout())
+        }
+    )
+}
 
 # Compute grid canopy height model with specified parameters
 out <- lidR::grid_canopy(
