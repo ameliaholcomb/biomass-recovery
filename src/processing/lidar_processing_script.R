@@ -21,13 +21,6 @@ option_list <- list(
         help = "Pattern to use for saving files",
         metavar = "character"
     ),
-    make_option(c("--save_intermediates"),
-        type = "logical",
-        default = FALSE,
-        help = "Whether to save intermediate files
-            (ground classified, normalised, ...)",
-        metavar = "bool"
-    ),
     make_option(c("--compress_intermediates"),
         type = "logical",
         default = TRUE,
@@ -147,6 +140,12 @@ option_list <- list(
         help = "Path to a heightmap of maximum heights to
          filter too high values.",
         metavar = "character"
+    ),
+    make_option(c("--n_workers"),
+        type = "integer",
+        default = 1L,
+        help = "Number of workers to use",
+        metavar = "number"
     )
 )
 
@@ -187,6 +186,14 @@ write(paste(
 ), stdout())
 ctg <- lidR::readLAScatalog(opt$lidar_path)
 print(ctg)
+
+# Set up multiprocessing pool if requesting more workers
+if (opt$n_workers > 1L) {
+    n_workers <- get_n_workers(opt$n_workers, length(ctg))
+    future::plan(future::multisession(workers = (n_workers)))
+} else {
+    write("Running in non-parallelised mode.", stdout())
+}
 
 # Perform check of the input files
 if (opt$perform_check) {
@@ -419,27 +426,41 @@ if (opt$perform_filter) {
 
         # Activate height filter from height map
         if (!is.null(opt$lidar_crs)) {
+            lidar_crs <- opt$lidar_crs
+        } else if (!is.na(raster::crs(ctg))) {
+            lidar_crs <- raster::crs(ctg)
+        } else {
+            lidar_crs <- NULL
+        }
+        if (!is.null(lidar_crs)) {
             # Load height map
             height_map <- raster::raster(opt$height_map_path)
             # Get ALS raster
-            extents <- raster::raster(raster::extent(ctg), crs = opt$lidar_crs)
+            extents <- raster::raster(raster::extent(ctg), crs = lidar_crs)
             # Transform extents to WGS84
             extents <- raster::projectExtent(
                 extents,
-                crs = "+proj=longlat +datum=WGS84 +no_defs"
+                crs = raster::crs(height_map)
             )@extent
             # Crop tree height map values from tree height map
-            height_map <- raster::crop(height_map, extents)
-            # Determine max filter value (either 10% above max value or more
-            #  than 5m, whichever is higher)
-            filter_height <- max(c(
-                height_map@data@max * 1.1,
-                height_map@data@max + 5
-            ))
-            lidR::opt_filter(ctg) <- paste("-drop_z_above", filter_height)
-            write(
-                paste("\nSet max filter height to", filter_height, ".\n"),
-                stdout()
+            tryCatch(
+                {
+                    height_map <- raster::crop(height_map, extents)
+                    # Determine max filter value (either 10% above max value or more
+                    #  than 5m, whichever is higher)
+                    filter_height <- max(c(
+                        height_map@data@max * 1.1,
+                        height_map@data@max + 5
+                    ))
+                    lidR::opt_filter(ctg) <- paste("-drop_z_above", filter_height)
+                    write(
+                        paste("\nSet max filter height to", filter_height, ".\n"),
+                        stdout()
+                    )
+                },
+                error = function(cond) {
+                    write(paste("Could not set max height filter.", cond), stdout())
+                }
             )
         }
 
