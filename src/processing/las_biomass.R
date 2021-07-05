@@ -30,7 +30,6 @@ kurtosis <- function(x, remove_nan = FALSE, excess_kurtosis = FALSE) {
 longo_formula <- function(z) {
     # Mean calculation
     zmean <- mean(z)
-    # TODO: Figure out which kurtosis to use (compare python, Longo vals)
     # kurtosis calculation
     zkurt <- kurtosis(z, remove_nan = TRUE, excess_kurtosis = FALSE)
     # 5%, 10% and 100% (max) quantile calculation
