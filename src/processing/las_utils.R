@@ -3,8 +3,14 @@ unprocessed_files <- function(ctg, tolerance = 1) {
     # Initialise by activating processing for all files
     is_unprocessed <- rep(TRUE, length(ctg))
 
-    # Extract spatial information of catalog
     out_dir <- dirname(ctg@output_options$output_files)
+    # Early stop if no prior files exist
+    if (!file.exists(out_dir) | length(list.files(out_dir)) == 0) {
+        write("No files processed yet.", stdout())
+        return(is_unprocessed)
+    }
+
+    # Extract spatial information of catalog
     out_ctg <- lidR::readLAScatalog(out_dir)
     processed_polygon <- lidR::as.spatial(out_ctg)
 
@@ -41,4 +47,21 @@ reload_ctg_output <- function(ctg) {
     lidR::opt_stop_early(reloaded_ctg) <- lidR::opt_stop_early(ctg)
 
     return(reloaded_ctg)
+}
+
+
+get_n_workers <- function(n_workers, n_tasks) {
+    N_CORES <- parallel::detectCores()
+
+    # Determine number of workers between 1 and N_CORES (fewer if fewer files)
+    n_workers <- max(
+        min(
+            n_workers,
+            n_tasks,
+            N_CORES - 1L
+        ),
+        1L
+    )
+    write(paste0("Working with ", n_workers, " workers"), stdout())
+    return(n_workers)
 }
