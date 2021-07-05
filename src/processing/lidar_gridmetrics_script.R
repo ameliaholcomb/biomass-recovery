@@ -70,6 +70,12 @@ option_list <- list(
         default = 32456,
         help = "Random seed for stochastic computations",
         metavar = "number"
+    ),
+    make_option(c("--n_workers"),
+        type = "integer",
+        default = 1L,
+        help = "Number of workers to use",
+        metavar = "number"
     )
 )
 
@@ -163,6 +169,14 @@ write(paste(
     ": ... Reading in catalog ...\n"
 ), stdout())
 ctg <- lidR::readLAScatalog(opt$lidar_path)
+
+# Set up multiprocessing pool if requesting more workers
+if (opt$n_workers > 1L) {
+    n_workers <- get_n_workers(opt$n_workers, length(ctg))
+    future::plan(future::multisession(workers = (n_workers)))
+} else {
+    write("Running in non-parallelised mode.", stdout())
+}
 
 if (opt$check_index) {
     # Ensure files are spatially indexed to greatly speed up computations
