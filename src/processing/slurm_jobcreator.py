@@ -4,8 +4,6 @@ import os
 import pathlib
 from typing import Union
 
-import pandas as pd
-
 from src.constants import SRC_PATH
 from src.utils.slurm import sbatch_header
 
@@ -44,7 +42,8 @@ echo = lambda x: f'echo "{x}"\n'
 
 
 def lidR_processing_job(  # pylint: disable=invalid-name
-    survey: Union[dict, pd.Series],
+    lidar_path: pathlib.Path,
+    survey_name: str,
     out_dir: os.PathLike,
     buffer: int = 50,
     chunk_size: int = 0,
@@ -52,8 +51,11 @@ def lidR_processing_job(  # pylint: disable=invalid-name
     filter_sensitivity: float = 1.1,
     filter_gridsize: float = 10,
     compress_intermediates: bool = True,
-    save_intermediates: bool = True,
+    perform_decimation: bool = False,
     perform_check: bool = False,
+    perform_classification: bool = True,
+    perform_normalisation: bool = True,
+    perform_filter: bool = True,
     as_file: bool = True,
     **slurm_kwargs,
 ) -> Union[str, pathlib.Path]:
@@ -79,9 +81,6 @@ def lidR_processing_job(  # pylint: disable=invalid-name
             quantile height for filtering. Defaults to 10.
         compress_intermediates (bool, optional): Whether compress any intermediate
             files, if they are saved. Defaults to True.
-        save_intermediates (bool, optional): Whether to save intermediate files
-            (ground classified points, normalised points) or whether to only save the
-            classified, normalised, filtered output.. Defaults to True.
         perform_check (bool, optional): Whether to run the lidR `las_check` before and
             print the output. Defaults to False.
         as_file (bool, optional): Whether to return the job-file. Defaults to True.
@@ -93,11 +92,11 @@ def lidR_processing_job(  # pylint: disable=invalid-name
             `as_file` argument)
     """
     # Path for lidar data
-    lidar_path = pathlib.Path(survey["path"])
+    lidar_path = pathlib.Path(lidar_path)
     assert lidar_path.exists()
 
     # Set up save prefix
-    save_prefix = survey["name"] + "_"
+    save_pattern = survey_name + "_" + r"\{XLEFT\}_\{YBOTTOM\}"
 
     # Create working directory path
     out_dir = pathlib.Path(out_dir)
@@ -106,10 +105,10 @@ def lidR_processing_job(  # pylint: disable=invalid-name
 
     # Create sbatch header
     header = sbatch_header(
-        job_name=survey["name"],
+        job_name=survey_name,
         working_directory=slurm_dir,
-        output_file_pattern=f"slurm_{survey['name']}-%j.out",
-        error_file_pattern=f"slurm_{survey['name']}-%j.err",
+        output_file_pattern=f"slurm_{survey_name}-%j.out",
+        error_file_pattern=f"slurm_{survey_name}-%j.err",
         **slurm_kwargs,
     )
 
@@ -122,7 +121,7 @@ def lidR_processing_job(  # pylint: disable=invalid-name
     body += echo("$(R --version)")
     body += seperator("Analysing file")
     body += echo(f"template generation time: {datetime.datetime.now()}")
-    body += echo(f"survey: {survey['name']}")
+    body += echo(f"survey: {survey_name}")
     body += echo(f"path: {lidar_path}")
     body += seperator("Executing R script")
     body += (
@@ -131,26 +130,31 @@ def lidR_processing_job(  # pylint: disable=invalid-name
         f" --save_path={out_dir}"
         f" --buffer={buffer}"
         f" --chunk_size={chunk_size}"
+        f" --perform_check={'TRUE' if perform_check else 'FALSE'}"
+        f" --perform_decimation={'TRUE' if perform_decimation else 'FALSE'}"
+        f" --perform_classification={'TRUE' if perform_classification else 'FALSE'}"
+        f" --perform_normalisation={'TRUE' if perform_normalisation else 'FALSE'}"
+        f" --perform_filter={'TRUE' if perform_filter else 'FALSE'}"
         f" --filter_quantile={filter_quantile}"
         f" --filter_sensitivity={filter_sensitivity}"
         f" --filter_gridsize={filter_gridsize}"
-        f" --save_prefix={save_prefix}"
-        f" --perform_check={'TRUE' if perform_check else 'FALSE'}"
-        f" --save_intermediates={'TRUE' if save_intermediates else 'FALSE'}"
+        f" --save_pattern={save_pattern}"
         f" --compress_intermediates={'TRUE' if compress_intermediates else 'FALSE'}"
     )
 
     if as_file:
-        job_file = slurm_dir / f"slurm_{survey['name']}.sh"
+        job_file = slurm_dir / f"slurm_{survey_name}.sh"
         with open(job_file, "w") as file:
             file.write(header + body)
+        job_file.chmod(0o777)
         return job_file
     else:
         return header + body
 
 
 def lidR_gridmetrics_job(  # pylint: disable=invalid-name
-    survey: Union[dict, pd.Series],
+    lidar_path: os.PathLike,
+    survey_name: str,
     out_dir: os.PathLike,
     metrics: dict,
     buffer: int = 10,
@@ -173,8 +177,6 @@ def lidR_gridmetrics_job(  # pylint: disable=invalid-name
             Defaults to 50.
         chunk_size (int, optional): Chunk size to use when processing the lidar data.
             This will be passed to the lidR processing script. Defaults to 0.
-        save_intermediates (str, optional): Prefix to prepend to each file that is
-            generated. Defaults to "".
         check_index (bool, optional): Whether to check the lidar point cloud data for
             a spatial index (.lax file) and create one if there is none. This can
             significantly improve processing times. Defaults to True.
@@ -189,11 +191,11 @@ def lidR_gridmetrics_job(  # pylint: disable=invalid-name
             `as_file` argument)
     """
     # Path for lidar data
-    lidar_path = pathlib.Path(out_dir / "processed")
+    lidar_path = pathlib.Path(lidar_path)
     assert lidar_path.exists()
 
     # Set up save prefix
-    save_prefix = survey["name"] + "_"
+    save_prefix = survey_name + "_"
 
     # Create working directory path
     slurm_dir = out_dir / "slurm"
@@ -203,10 +205,10 @@ def lidR_gridmetrics_job(  # pylint: disable=invalid-name
 
     # Create sbatch header
     header = sbatch_header(
-        job_name=survey["name"] + "_grid_metrics",
+        job_name=survey_name + "_grid_metrics",
         working_directory=slurm_dir,
-        output_file_pattern=f"slurm_{survey['name']}_metrics-%j.out",
-        error_file_pattern=f"slurm_{survey['name']}_metrics-%j.err",
+        output_file_pattern=f"slurm_{survey_name}_metrics-%j.out",
+        error_file_pattern=f"slurm_{survey_name}_metrics-%j.err",
         **slurm_kwargs,
     )
 
@@ -218,7 +220,7 @@ def lidR_gridmetrics_job(  # pylint: disable=invalid-name
     body += echo("$(R --version)")
     body += seperator("Analysing file")
     body += echo(f"template generation time: {datetime.datetime.now()}")
-    body += echo(f"survey: {survey['name']}")
+    body += echo(f"survey: {survey_name}")
     body += echo(f"path: {lidar_path}")
     body += echo(f"metrics: {metrics}")
     body += seperator("Executing R script")
@@ -226,45 +228,92 @@ def lidR_gridmetrics_job(  # pylint: disable=invalid-name
     if "canopy_height" in metrics.keys():
         for gridsize in metrics.pop("canopy_height"):
             body += f"\n# `Canopy height` at grid size `{gridsize}m`\n"
-            body += (
-                f"Rscript --verbose --no-save {LIDR_CANOPY_HEIGHT_SCRIPT}"
-                f" --lidar_path={lidar_path}"
-                f" --gridsize={gridsize}"
-                f" --save_path={out_dir}"
-                f" --buffer={buffer}"
-                f" --chunk_size={chunk_size}"
-                f" --save_prefix={save_prefix}"
-                f" --overwrite={'TRUE' if overwrite else 'FALSE'}"
-                f" --check_index={'TRUE' if check_index else 'FALSE'}"
-                "\n"
+            body += lidR_canopy_height_call(
+                lidar_path=lidar_path,
+                gridsize=gridsize,
+                out_dir=out_dir,
+                buffer=buffer,
+                chunk_size=chunk_size,
+                save_prefix=save_prefix,
+                overwrite=overwrite,
+                check_index=check_index,
             )
+            body += "\n"
 
     for metric in metrics.keys():
-        assert (
-            metric in ALLOWED_METRICS or "quantile_" in metric
-        ), f"{metric} not allowed."
         for gridsize in metrics[metric]:
             body += f"\n# Metric `{metric}` at grid size `{gridsize}m`\n"
-            body += (
-                f"Rscript --verbose --no-save {LIDR_GRID_METRICS_SCRIPT}"
-                f" --lidar_path={lidar_path}"
-                f" --metric={metric if 'quantile' not in metric else 'quantile'}"
-                f" --gridsize={gridsize}"
-                f" --save_path={out_dir}"
-                f" --buffer={buffer}"
-                f" --chunk_size={chunk_size}"
-                f" --save_prefix={save_prefix}"
-                f" --overwrite={'TRUE' if overwrite else 'FALSE'}"
-                f" --check_index={'TRUE' if check_index else 'FALSE'}"
-                " --quantile="
-                f"{str(metric.split('_')[-1]) if 'quantile' in metric else ''}"
-                "\n"
+            body += lidR_grid_metrics_call(
+                metric=metric,
+                lidar_path=lidar_path,
+                gridsize=gridsize,
+                out_dir=out_dir,
+                buffer=buffer,
+                chunk_size=chunk_size,
+                save_prefix=save_prefix,
+                overwrite=overwrite,
+                check_index=check_index,
             )
+            body += "\n"
 
     if as_file:
-        job_file = slurm_dir / f"slurm_{survey['name']}_grid_metrics.sh"
+        job_file = slurm_dir / f"slurm_{survey_name}_grid_metrics.sh"
         with open(job_file, "w") as file:
             file.write(header + body)
+        job_file.chmod(0o777)
         return job_file
     else:
         return header + body
+
+
+def lidR_grid_metrics_call(
+    metric: str,
+    lidar_path: os.PathLike,
+    gridsize: float,
+    out_dir: os.PathLike,
+    buffer: float,
+    chunk_size: float,
+    save_prefix: str,
+    overwrite: bool,
+    check_index: bool,
+) -> str:
+    assert metric in ALLOWED_METRICS or "quantile_" in metric, f"{metric} not allowed."
+
+    body = (
+        f"Rscript --verbose --no-save {LIDR_GRID_METRICS_SCRIPT}"
+        f" --lidar_path={lidar_path}"
+        f" --metric={metric if 'quantile' not in metric else 'quantile'}"
+        f" --gridsize={gridsize}"
+        f" --save_path={out_dir}"
+        f" --buffer={buffer}"
+        f" --chunk_size={chunk_size}"
+        f" --save_prefix={save_prefix}"
+        f" --overwrite={'TRUE' if overwrite else 'FALSE'}"
+        f" --check_index={'TRUE' if check_index else 'FALSE'}"
+    )
+    if "quantile" in metric:
+        body += f" --quantile={str(metric.split('_')[-1])}"
+    return body
+
+
+def lidR_canopy_height_call(
+    lidar_path: os.PathLike,
+    gridsize: float,
+    out_dir: os.PathLike,
+    buffer: float,
+    chunk_size: float,
+    save_prefix: str,
+    overwrite: bool,
+    check_index: bool,
+) -> str:
+    return (
+        f"Rscript --verbose --no-save {LIDR_CANOPY_HEIGHT_SCRIPT}"
+        f" --lidar_path={lidar_path}"
+        f" --gridsize={gridsize}"
+        f" --save_path={out_dir}"
+        f" --buffer={buffer}"
+        f" --chunk_size={chunk_size}"
+        f" --save_prefix={save_prefix}"
+        f" --overwrite={'TRUE' if overwrite else 'FALSE'}"
+        f" --check_index={'TRUE' if check_index else 'FALSE'}"
+    )
