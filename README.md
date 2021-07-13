@@ -19,7 +19,6 @@
 |   |                     the creator's initials, and a short `-` delimited description, e.g.
 |   |                     `1.0_jqp_initial-data-exploration`.
 │   ├── exploratory    <- Notebooks for initial exploration.
-│   └── reports        <- Polished notebooks for presentations or intermediate results.
 │
 ├── report             <- Generated analysis as HTML, PDF, LaTeX, etc.
 │   ├── figures        <- Generated graphics and figures to be used in reporting
