@@ -4,7 +4,8 @@ import math
 
 def get_utm_zone(lon: float, lat: float) -> str:
     """
-    Return the EPSG code of the corresponding UTM zone given (lon, lat) coordinates.
+    Return the EPSG code of the corresponding wGS84 UTM zone given (lon, lat)
+    coordinates.
 
     Args:
         lon (float): Longitude (in WGS84)
