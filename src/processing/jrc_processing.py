@@ -2,7 +2,7 @@
 
 import argparse
 import re
-from typing import Union
+from typing import Optional, Union
 
 import numba
 import numpy as np
@@ -16,6 +16,10 @@ from src.utils.logging import get_logger
 logger = get_logger(__file__)
 
 ANNUAL_CHANGE_PATH = JRC_PATH / "AnnualChange/tifs"
+JRC_ANNUAL_CHANGE_UNDISTURBED = 1
+JRC_ANNUAL_CHANGE_DEGRADATION = 2
+JRC_ANNUAL_CHANGE_DEFORESTATION = 3
+JRC_ANNUAL_CHANGE_RECOVERY = 4
 
 
 @numba.njit
@@ -90,12 +94,76 @@ def first_of_value(
     return first_observation
 
 
+def compute_last_observation(
+    annual_change: xr.DataArray,
+    jrc_class_value: int,
+    first_observation: xr.DataArray = None,
+    year_offset: int = 1990,
+):
+
+    if first_observation is not None:
+        last_observation = xr.zeros_like(first_observation)
+    else:
+        last_observation = xr.zeros_like(annual_change[0])
+
+    # Compute last year of observation (Note: Due to the size of the datasets this takes
+    #  ~10 min, even with numba speedup)
+    last_observation.data = last_of_value(annual_change.data, value=jrc_class_value)
+
+    # Fix all negative/fill values and all values prior to 1990 with the first year of
+    #  deforestation.
+    if first_observation is not None:
+        last_year = annual_change.year.data[-1]
+        last_observation = xr.concat(
+            [
+                first_observation.where(first_observation <= last_year, other=0),
+                last_observation + year_offset,
+            ],
+            dim="observations",
+        ).max(dim="observations")
+    else:
+        last_observation = (year_offset + last_observation).where(
+            last_observation > 0, other=0
+        )
+
+    return last_observation.astype(float)
+
+
+def compute_recovery_period(
+    annual_change: xr.DataArray,
+    first_deforestation: Optional[xr.DataArray] = None,
+    first_degradation: Optional[xr.DataArray] = None,
+    as_startyear: bool = False,
+):
+
+    last_deforested = compute_last_observation(
+        annual_change, JRC_ANNUAL_CHANGE_DEFORESTATION, first_deforestation
+    )
+    last_degraded = compute_last_observation(
+        annual_change, JRC_ANNUAL_CHANGE_DEGRADATION, first_degradation
+    )
+
+    survey_year = annual_change.year.data[-1]
+    deforested_before_survey = last_deforested < survey_year
+    not_degraded_since_last_deforested = last_deforested > last_degraded
+    recovering = annual_change.loc[survey_year] == JRC_ANNUAL_CHANGE_RECOVERY
+
+    undisturbed_recovery = (
+        recovering & deforested_before_survey & not_degraded_since_last_deforested
+    )
+
+    if as_startyear:
+        return last_deforested.where(undisturbed_recovery)
+    return survey_year - last_deforested.where(undisturbed_recovery)
+
+
 # pylint: disable=redefined-outer-name
 def calculate_jrc_last_observation_year(
     tile_identifier: str,
-    jrc_class_value: int = 3,  # 3 is deforestation class
+    jrc_class_value: int = JRC_ANNUAL_CHANGE_DEFORESTATION,  # 3 is deforestation class
     dataset: str = "DeforestationYear",
     overwrite: bool = False,
+    final_year: int = 2019,
 ) -> bool:
     """
     Calculates the year of last observation of `jrc_class_value`in the JRC AnnualChange
@@ -129,7 +197,9 @@ def calculate_jrc_last_observation_year(
     """
 
     first_observation_path = (
-        JRC_PATH / dataset / f"JRC_TMF_{dataset}_v1_1982_2019_{tile_identifier}.tif"
+        JRC_PATH
+        / dataset
+        / f"JRC_TMF_{dataset}_v1_1982_{final_year}_{tile_identifier}.tif"
     )
     annual_change_paths = {
         year: (
@@ -138,7 +208,7 @@ def calculate_jrc_last_observation_year(
             / "tifs"
             / f"JRC_TMF_AnnualChange_v1_{year}_{tile_identifier}.tif"
         )
-        for year in range(1990, 2020)
+        for year in range(1990, final_year + 1)
     }
 
     if not first_observation_path.exists():
@@ -177,26 +247,11 @@ def calculate_jrc_last_observation_year(
     logger.info("Load year of %s dataset", dataset)
     first_observation = rxr.open_rasterio(first_observation_path).squeeze()
 
-    # Initialise last year of observation with same shape
-    logger.info("Initialise empty array for last observation year data")
-    last_observation = xr.zeros_like(first_observation)
-
-    # Compute last year of observation (Note: Due to the size of the datasets this takes
-    #  ~10 min, even with numba speedup)
-    logger.info(
-        "Compute last observation years of value %s from annual timeseries",
-        jrc_class_value,
+    last_observation = compute_last_observation(
+        annual_change=annual_change_maps,
+        jrc_class_value=jrc_class_value,
+        first_observation=first_observation,
     )
-    last_observation.data = last_of_value(
-        annual_change_maps.data, value=jrc_class_value
-    )
-
-    # Fix all negative/fill values and all values prior to 1990 with the first year of
-    #  deforestation.
-    logger.info("Fix fill values with first year of observation or 0")
-    last_observation = xr.concat(
-        [first_observation, last_observation + 1990], dim="observations"
-    ).max(dim="observations")
 
     # Save result
     logger.info("Save result to compressed GeoTiff")
