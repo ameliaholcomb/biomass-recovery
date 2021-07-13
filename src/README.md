@@ -9,13 +9,12 @@ src
 │
 ├── constants.py   <- Includes project wide constants for easy imports
 │
-├── data_loading   <- Scripts to download or generate data
+├── data           <- Scripts to download, fetch or generate data
 |
-├── preprocessing  <- Scripts to turn raw data into clean data and features for modeling
+├── processing     <- Scripts to turn raw data into clean data and features for modeling
 │
-├── models         <- Scripts to train models and then use trained models to make
-│                     predictions
-└── tests          <- Scripts for unit tests of your functions
+├── visualisation  <- Scripts for visualisations
+│
+├── utils          <- Misc. files for various support tasks
 ```
 
-This generic folder structure is useful for most project, but feel free to adapt it to your needs.
