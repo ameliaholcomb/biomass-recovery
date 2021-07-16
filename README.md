@@ -9,13 +9,15 @@
 ## Data availability
 This project uses the following data sources:
 
-| Data source                              | Availability                                                                  | Platform | LiDAR         | Date range      |
-|------------------------------------------|-------------------------------------------------------------------------------|----------|---------------|-----------------|
-| GEDI Level 2A (v002)                     | [public](https://lpdaac.usgs.gov/products/gedi02_av002/)                      | Space    | Full-waveform | 2019-2020       |
-| Estimativa de biomassa na Amazonia (EBA) | [proprietary](https://zenodo.org/record/4968706#.YPGe7OhKhEY)                 | Aerial   | Point cloud   | 2016-2018       |
-| Sustainable Landscapes (SL)              | [public](https://daac.ornl.gov/CMS/guides/LiDAR_Forest_Inventory_Brazil.html) | Aerial   | Point cloud   | 2008, 2011-2018 |
+| Data source                                           | Availability                                                                  | Sensors                                     | Data                | Date range      | No. observations (used) | Area covered |
+|-------------------------------------------------------|-------------------------------------------------------------------------------|---------------------------------------------|---------------------|-----------------|-------------------------|--------------|
+| GEDI Level 2A (v002)                                  | [public](https://lpdaac.usgs.gov/products/gedi02_av002/)                      | Space-borne LiDAR                           | Full-waveform LiDAR | 2019-2020       | 150 Mio.                | 7.4 Mio. ha  |
+| Estimativa de biomassa na Amazonia (EBA)              | [proprietary](https://zenodo.org/record/4968706#.YPGe7OhKhEY)                 | Aerial LiDAR                                | Point cloud LiDAR   | 2016-2018       | 905                     | 574'000 ha   |
+| Sustainable Landscapes (SL)                           | [public](https://daac.ornl.gov/CMS/guides/LiDAR_Forest_Inventory_Brazil.html) | Aerial LiDAR                                | Point cloud LiDAR   | 2008, 2011-2018 | 186                     | 40'000       |
+| EU Joint Research Council (JRC) Annual Change dataset | [public](https://forobs.jrc.ec.europa.eu/TMF/download/)                       | Space-borne multispectral imagery (Landsat) | Landcover Raster    | 1992-2020       | -                       |              |
 
 An geographic map of all air-borne LiDAR data with metadata is available [here](https://simonmathis.org/projects/sequestration/map.html).
+The created dataset
 
 ## Project Organization
 ```
