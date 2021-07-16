@@ -15,6 +15,7 @@ This project uses the following data sources:
 | Estimativa de biomassa na Amazonia (EBA) | [proprietary](https://zenodo.org/record/4968706#.YPGe7OhKhEY)                 | Aerial   | Point cloud   | 2016-2018       |
 | Sustainable Landscapes (SL)              | [public](https://daac.ornl.gov/CMS/guides/LiDAR_Forest_Inventory_Brazil.html) | Aerial   | Point cloud   | 2008, 2011-2018 |
 
+An geographic map of all air-borne LiDAR data with metadata is available [here](https://simonmathis.org/projects/sequestration/map.html).
 
 ## Project Organization
 ```
