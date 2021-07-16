@@ -6,7 +6,14 @@
 ## Requirements
 - Python 3.9+
 
-## Getting started
+## Data availability
+This project uses the following data sources:
+
+| Data source                              | Availability                                                                  | Platform | LiDAR         | Date range      |
+|------------------------------------------|-------------------------------------------------------------------------------|----------|---------------|-----------------|
+| GEDI Level 2A (v002)                     | [public](https://lpdaac.usgs.gov/products/gedi02_av002/)                      | Space    | Full-waveform | 2019-2020       |
+| Estimativa de biomassa na Amazonia (EBA) | [proprietary](https://zenodo.org/record/4968706#.YPGe7OhKhEY)                 | Aerial   | Point cloud   | 2016-2018       |
+| Sustainable Landscapes (SL)              | [public](https://daac.ornl.gov/CMS/guides/LiDAR_Forest_Inventory_Brazil.html) | Aerial   | Point cloud   | 2008, 2011-2018 |
 
 
 ## Project Organization
