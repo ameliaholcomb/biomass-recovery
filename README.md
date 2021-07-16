@@ -17,7 +17,7 @@ This project uses the following data sources:
 | EU Joint Research Council (JRC) Annual Change dataset | [public](https://forobs.jrc.ec.europa.eu/TMF/download/)                       | Space-borne multispectral imagery (Landsat) | Landcover Raster    | 1992-2020       | -                       |              |
 
 An geographic map of all air-borne LiDAR data with metadata is available [here](https://simonmathis.org/projects/sequestration/map.html).
-The created dataset
+The dataset created in this study will be made available upon publication.
 
 ## Project Organization
 ```
