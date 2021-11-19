@@ -11,6 +11,7 @@ constants_path = Path(__file__)
 SRC_PATH = constants_path.parent
 PROJECT_PATH = SRC_PATH.parent
 dotenv.load_dotenv()
+CONDA_ENV = os.getenv('CONDA_DEFAULT_ENV')
 
 # Log relatedd paths
 LOG_PATH = PROJECT_PATH / "logs"
@@ -19,6 +20,7 @@ LOG_PATH.mkdir(parents=True, exist_ok=True)
 #  Data related paths
 USER_PATH = Path("/gws/nopw/j04/forecol/svm34")
 DATA_PATH = Path("/gws/nopw/j04/forecol/data")
+SCRATCH_PATH = Path("/work/scratch-nopw/forecol")
 
 GEDI_PATH = DATA_PATH / "GEDI"
 GEDI_L1B_PATH = GEDI_PATH / "level1B"

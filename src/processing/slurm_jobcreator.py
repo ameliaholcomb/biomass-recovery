@@ -4,7 +4,7 @@ import os
 import pathlib
 from typing import Union
 
-from src.constants import SRC_PATH
+from src.constants import SRC_PATH, CONDA_ENV
 from src.utils.slurm import sbatch_header
 
 LIDR_PROCESSING_SCRIPT = SRC_PATH / "processing" / "lidar_processing_script.R"
@@ -114,7 +114,7 @@ def lidR_processing_job(  # pylint: disable=invalid-name
 
     body = seperator("Activating conda environment")
     body += "source ~/.bashrc\n"
-    body += "conda activate r4_env\n"
+    body += "conda activate " + CONDA_ENV + "\n"
     body += seperator("Checking R version")
     body += echo("$(which R)")
     # body += "echo $(which R)\n"
@@ -214,7 +214,7 @@ def lidR_gridmetrics_job(  # pylint: disable=invalid-name
 
     body = seperator("Activating conda environment")
     body += "source ~/.bashrc\n"
-    body += "conda activate r4_env\n"
+    body += "conda activate " + CONDA_ENV + "\n"
     body += seperator("Checking R version")
     body += echo("$(which R)")
     body += echo("$(R --version)")

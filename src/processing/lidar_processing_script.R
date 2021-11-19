@@ -150,7 +150,8 @@ option_list <- list(
 )
 
 # Import custom scripts
-R_SCRIPT_PATH <- "/home/users/svm/Code/gedi_biomass_mapping/src/processing/"
+# TODO: Remove hard-coded path constant
+R_SCRIPT_PATH <- "/home/users/ah2174/gedi-biomass-mapping/src/processing/"
 
 source(paste0(R_SCRIPT_PATH, "timestamp.R"))
 source(paste0(R_SCRIPT_PATH, "las_clean.R"))
