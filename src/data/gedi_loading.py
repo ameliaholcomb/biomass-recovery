@@ -148,7 +148,7 @@ ALLOWED_COLUMNS = [
 
 def gedi_sql_query(
     columns: str = "*",
-    geometry=None,
+    geometry: gpd.GeoSeries = None,
     crs: str = WGS84,
     start_time: str = None,
     end_time: str = None,
@@ -172,7 +172,7 @@ def gedi_sql_query(
         crs = gpd.tools.crs.CRS(crs)
         conditions += [
             "ST_Intersects(geometry, "
-            f"ST_GeomFromText('{geometry.to_wkt()}', {crs.to_epsg()}))"
+            f"ST_GeomFromText('{geometry.to_wkt().values[0]}', {crs.to_epsg()}))"
         ]
     # Combining conditions
     condition = f" WHERE {' and '.join(conditions)}" if len(conditions) > 0 else ""
@@ -190,7 +190,7 @@ def gedi_sql_query(
 
 def load_gedi_data(
     columns: str = "*",
-    geometry=None,
+    geometry: gpd.GeoDataFrame = None,
     crs: str = WGS84,
     start_time: str = None,
     end_time: str = None,

@@ -3,6 +3,7 @@ import logging
 import numba
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 
 from src.constants import WGS84
 from src.data.gedi_loading import load_gedi_data
@@ -54,11 +55,10 @@ def overlay_gedi_shots_and_recovery_raster(gedi_shots, recovery_period):
                 # ... else, set quality flag 0
                 filtered_shots.append((shot_id, recovery_at_shot, 0))
     # Return the shots
-    logger.debug("Converting to array")
-    return np.array(filtered_shots, dtype=np.uint64)
+    return filtered_shots
 
 
-def compute_gedi_recovery(geometry, year, crs: str = WGS84):
+def compute_gedi_recovery(geometry: gpd.GeoSeries, year: int, crs: str = WGS84):
 
     # Load GEDI data within tile
     logger.info("Loading GEDI shots for %s", year)
@@ -68,6 +68,7 @@ def compute_gedi_recovery(geometry, year, crs: str = WGS84):
             "absolute_time",
             "lon_highestreturn",
             "lat_highestreturn",
+            "rh95",
             "geometry",
         ],
         geometry=geometry,
@@ -79,14 +80,14 @@ def compute_gedi_recovery(geometry, year, crs: str = WGS84):
         "Found %s shots in %s in the specified geometry", len(gedi_shots), year
     )
     if len(gedi_shots) == 0:
-        raise RuntimeError("Found 0 shots specified geometry and year.")
+        raise RuntimeError("Found 0 shots in the specified geometry and year.")
 
     # Load JRC data within tile
     logger.info("Loading JRC data from 1990 to %s", year)
-    first_deforestation = load_jrc_data(*geometry.bounds, dataset="DeforestationYear")
-    first_degradation = load_jrc_data(*geometry.bounds, dataset="DegradationYear")
+    first_deforestation = load_jrc_data(*geometry.bounds.values[0], dataset="DeforestationYear")
+    first_degradation = load_jrc_data(*geometry.bounds.values[0], dataset="DegradationYear")
     annual_change = load_jrc_data(
-        *geometry.bounds, dataset="AnnualChange", years=list(range(1990, year + 1))
+        *geometry.bounds.values[0], dataset="AnnualChange", years=list(range(1990, year + 1))
     )
 
     # Compute recovery period from JRC
@@ -97,8 +98,11 @@ def compute_gedi_recovery(geometry, year, crs: str = WGS84):
 
     # Extract JRC locations that correspond to GEDI shots
     filtered_shots = overlay_gedi_shots_and_recovery_raster(gedi_shots, recovery_period)
+    if len(filtered_shots) == 0:
+        logger.warning(f"No shots found overlapping with JRC recovery data in {year}")
+        return None
     dataset = pd.DataFrame(
         filtered_shots,
         columns=["shot_number", "recovery_period", "overlap_quality"],
     )
-    return dataset
+    return dataset.join(gedi_shots[["shot_number", "rh95"]].set_index("shot_number"), on="shot_number")
