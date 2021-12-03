@@ -29,15 +29,25 @@ class GediNameMetadata:
     minute: str
     second: str
     orbit: str
-    sub_orbit_granule: str
     ground_track: str
     positioning: str
-    pge_version_number: str
     granule_production_version: str
     release_number: str
 
+@dataclass
+class GediLPNameMetadata(GediNameMetadata):
+    """Data class container for metadata derived from GEDI file names 
+    released by the LP DAAC"""
+    sub_orbit_granule: str
+    pge_version_number: str
 
-GEDI_SUBPATTERN = GediNameMetadata(
+@dataclass
+class GediORNLNameMetadata(GediNameMetadata):
+    """Data class container for metadata derived from GEDI file names 
+    released by the ORNL DAAC"""
+
+
+GEDI_SUBPATTERN_LP = GediLPNameMetadata(
     product=r"\w+_\w",
     year=r"\d{4}",
     julian_day=r"\d{3}",
@@ -53,21 +63,22 @@ GEDI_SUBPATTERN = GediNameMetadata(
     release_number=r"V\d+",
 )
 
+GEDI_SUBPATTERN_ORNL = GediORNLNameMetadata(
+    product=r"\w+_\w",
+    year=r"\d{4}",
+    julian_day=r"\d{3}",
+    hour=r"\d{2}",
+    minute=r"\d{2}",
+    second=r"\d{2}",
+    orbit=r"O\d+",
+    ground_track=r"T\d+",
+    positioning=r"\d{2}",
+    release_number=r"\d{3}",
+    granule_production_version=r"\d{2}",
+)
 
-def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
-    """
-    Parse a GEDI granule filename for the relevant metadata contained in the name.
-
-    Args:
-        gedi_filename (str): The filename to parse.
-
-    Raises:
-        ValueError: If the filename gedi_filename does not follow the GEDI conventions
-
-    Returns:
-        GediNameMetadata: The parsed metadata in a dataclass container
-    """
-
+def _parse_lp_granule_filename(gedi_filename: str) -> GediLPNameMetadata:
+    GEDI_SUBPATTERN = GEDI_SUBPATTERN_LP
     gedi_naming_pattern = re.compile(
         (
             f"({GEDI_SUBPATTERN.product})"
@@ -86,12 +97,70 @@ def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
         )
     )
     parse_result = re.search(gedi_naming_pattern, gedi_filename)
-
     if parse_result is None:
         raise ValueError(
             f"Filename {gedi_filename} does not conform the the GEDI naming pattern."
         )
-    return GediNameMetadata(*parse_result.groups())
+    return GediLPNameMetadata(*parse_result.groups())
+
+def _parse_ornl_granule_filename(gedi_filename: str) -> GediORNLNameMetadata:
+    GEDI_SUBPATTERN = GEDI_SUBPATTERN_ORNL
+    gedi_naming_pattern = re.compile(
+        (
+            f"({GEDI_SUBPATTERN.product})"
+            f"_({GEDI_SUBPATTERN.year})"
+            f"({GEDI_SUBPATTERN.julian_day})"
+            f"({GEDI_SUBPATTERN.hour})"
+            f"({GEDI_SUBPATTERN.minute})"
+            f"({GEDI_SUBPATTERN.second})"
+            f"_({GEDI_SUBPATTERN.orbit})"
+            f"_({GEDI_SUBPATTERN.ground_track})"
+            f"_({GEDI_SUBPATTERN.positioning})"
+            f"_({GEDI_SUBPATTERN.release_number})"
+            f"_({GEDI_SUBPATTERN.granule_production_version})"
+        )
+    )
+    parse_result = re.search(gedi_naming_pattern, gedi_filename)
+    if parse_result is None:
+        raise ValueError(
+            f"Filename {gedi_filename} does not conform the the GEDI naming pattern."
+        )
+    return GediORNLNameMetadata(*parse_result.groups())
+
+def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
+    """
+    Parse a GEDI granule filename for the relevant metadata contained in the name.
+
+    Args:
+        gedi_filename (str): The filename to parse.
+
+    Raises:
+        ValueError: If the filename gedi_filename does not follow the GEDI conventions
+
+    Returns:
+        GediNameMetadata: The parsed metadata in a dataclass container
+    """
+
+    # The LP DAAC and ORNL DAAC use slightly different naming conventions.
+    # Check which is being used here
+    gedi_product_pattern = re.compile(r"GEDI([0-9]+)_(\w)")
+    parse_result = re.search(gedi_product_pattern, gedi_filename)
+    if parse_result is None:
+        raise ValueError(
+            f"Filename {gedi_filename} does not conform the the GEDI naming pattern."
+        )
+    level = int(parse_result.group(1))
+    # Levels 1 and 2 are distributed by the LP DAAC
+    if level == 1 or level == 2:
+        return _parse_lp_granule_filename(gedi_filename)
+    # Levels 3 and 4 are distributed by the ORNL DAAC
+    elif level == 3 or level == 4: 
+        return _parse_ornl_granule_filename(gedi_filename)
+    else:
+        raise ValueError(
+            f"Filename {gedi_filename} does not conform the the GEDI naming pattern."
+        )
+
 
 
 class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
@@ -185,12 +254,14 @@ class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
                 f" Start time:   {self.start_datetime.time()}\n"
                 f" HDF object:   {super().__repr__()}"
             )
-        except ValueError:
+        except AttributeError:
             description = (
                 "GEDI Granule:\n"
                 f" Granule name: {self.filename}\n"
                 f" Product:      {self.product}\n"
                 f" No. beams:    {self.n_beams}\n"
+                f" Start date:   {self.start_datetime.date()}\n"
+                f" Start time:   {self.start_datetime.time()}\n"
                 f" HDF object:   {super().__repr__()}"
             )
         return description
@@ -268,8 +339,8 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
         Note:
         For GEDI_L1B products the (lon, lat) coordinates of the last bin in the return
         waveform are returned.
-        For GEDI_L2A procuts the (lon, lat) coordinates of the lowest mode (i.e. the
-        ground mode) are returned.
+        For GEDI_L2A and L4A products the (lon, lat) coordinates of the lowest mode
+        (i.e. the ground mode) are returned.
         As a result, it is expected that the (lon, lat) values for the same shot but
         different products is not exactly the same.
 
@@ -279,7 +350,11 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
                 the WGS84 coordinate reference system.
         """
         if self._shot_lon_lat is None:
-            if self.parent_granule.product == "GEDI_L2A":
+            if self.parent_granule.product == "GEDI_L4A":
+                self._shot_lon_lat = list(
+                    zip(self["lon_lowestmode"], self["lat_lowestmode"])
+                )
+            elif self.parent_granule.product == "GEDI_L2A":
                 self._shot_lon_lat = list(
                     zip(self["lon_lowestmode"], self["lat_lowestmode"])
                 )
@@ -322,10 +397,64 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
             return self._get_gedi1b_main_data_dict()
         elif self.parent_granule.product == "GEDI_L2A":
             return self._get_gedi2a_main_data_dict()
+        elif self.parent_granule.product == "GEDI_L4A":
+            return self._get_gedi4a_main_data_dict()
         else:
             raise NotImplementedError(
                 f"No method to get main data for product {self.parent_granule.product}"
             )
+
+    def _get_gedi4a_main_data_dict(self) -> dict:
+        """
+        Return the main data for all shots in a GEDI L4A product beam as a dictionary.
+        Download the L4A data dictionary from
+        https://daac.ornl.gov/GEDI/guides/GEDI_L4A_AGB_Density.html for details
+        of all the available variables.
+
+        Returns: A dictionary containing the main data for all shots in the given
+            beam of the granule.
+        """
+        gedi_l4a_count_start = pd.to_datetime("2018-01-01T00:00:00Z")
+        data = {
+            # General identifiable data
+            "granule_name": [self.parent_granule.filename] * self.n_shots,
+            "shot_number": self["shot_number"][:],
+            "beam_type": [self.beam_type] * self.n_shots,
+            "beam_name": [self.name] * self.n_shots,
+            # Temporal data
+            "delta_time": self["delta_time"][:],
+            "absolute_time": (
+                gedi_l4a_count_start
+                + pd.to_timedelta(list(self["delta_time"]), unit="seconds")
+            ),
+            # Quality data
+            "sensitivity": self["sensitivity"][:],
+            "algorithm_run_flag": self["algorithm_run_flag"][:],
+            "degrade_flag": self["degrade_flag"][:],
+            "l2_quality_flag": self["l2_quality_flag"][:],
+            "l4_quality_flag": self["l4_quality_flag"][:],
+            "predictor_limit_flag": self["predictor_limit_flag"][:],
+            "response_limit_flag": self["response_limit_flag"][:],
+            "surface_flag": self["surface_flag"][:],
+            # Processing data
+            "selected_algorithm": self["selected_algorithm"][:],
+            "selected_mode": self["selected_mode"][:],
+            # Geolocation data
+            "elev_lowestmode": self["elev_lowestmode"][:],
+            "lat_lowestmode": self["lat_lowestmode"][:],
+            "lon_lowestmode": self["lon_lowestmode"][:],
+            # ABGD data
+            "agbd": self["agbd"][:],
+            "agbd_pi_lower": self["agbd_pi_lower"][:],
+            "agbd_pi_upper": self["agbd_pi_upper"][:],
+            "agbd_se": self["agbd_se"][:],
+            "agbd_t": self["agbd_t"][:],
+            "agbd_t_se": self["agbd_t_se"][:],
+            # Land cover data
+            "pft_class": self["land_cover_data/pft_class"][:],
+            "region_class": self["land_cover_data/region_class"][:],
+        }
+        return data
 
     def _get_gedi2a_main_data_dict(self) -> dict:
         """
