@@ -272,7 +272,7 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
         super().__init__(granule[beam_name].id)
         self.parent_granule = granule  # Reference to parent granule
         self._cached_data = None
-        self._shot_lon_lat = None
+        self._shot_geolocations = None
 
     def list_datasets(self, top_level_only: bool = True) -> list[str]:
         if top_level_only:
@@ -324,53 +324,32 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
                 Longitude, Latitude coordinates are given in the WGS84 coordinate
                 reference system.
         """
-        geolocations = np.array(
-            [shapely.geometry.Point(lon, lat) for lon, lat in self.shot_lon_lat],
-            dtype=shapely.geometry.Point,
-        )
-
-        return geopandas.array.GeometryArray(geolocations, crs=WGS84)
-
-    @property
-    def shot_lon_lat(self) -> list[tuple[float, float]]:
-        """
-        Return a list of (lon, lat) coordinates of each shot in the beam.
-
-        Note:
-        For GEDI_L1B products the (lon, lat) coordinates of the last bin in the return
-        waveform are returned.
-        For GEDI_L2A and L4A products the (lon, lat) coordinates of the lowest mode
-        (i.e. the ground mode) are returned.
-        As a result, it is expected that the (lon, lat) values for the same shot but
-        different products is not exactly the same.
-
-        Returns:
-            list[tuple[float, float]]: A list with the (longitude, latitude) positions
-                of the shots in the beam. Longitude, Latitude coordinates are given in
-                the WGS84 coordinate reference system.
-        """
-        if self._shot_lon_lat is None:
+        if self._shot_geolocations is None:
             if self.parent_granule.product == "GEDI_L4A":
-                self._shot_lon_lat = list(
-                    zip(self["lon_lowestmode"], self["lat_lowestmode"])
+                self._shot_geolocations = gpd.points_from_xy(
+                    x = self["lon_lowestmode"],
+                    y = self["lat_lowestmode"],
+                    crs = WGS84
                 )
             elif self.parent_granule.product == "GEDI_L2A":
-                self._shot_lon_lat = list(
-                    zip(self["lon_lowestmode"], self["lat_lowestmode"])
+                self._shot_geolocations = gpd.points_from_xy(
+                    x = self["lon_lowestmode"],
+                    y = self["lat_lowestmode"],
+                    crs = WGS84
                 )
             elif self.parent_granule.product == "GEDI_L1B":
-                self._shot_lon_lat = list(
-                    zip(
-                        self["geolocation/longitude_lastbin"],
-                        self["geolocation/latitude_lastbin"],
-                    )
+                self._shot_geolocations = gpd.points_from_xy(
+                    x = self["geolocation/longitude_lastbin"],
+                    y = self["geolocation/latitude_lastbin"],
+                    crs = WGS84
                 )
             else:
                 raise NotImplementedError(
                     "No method to get main data for "
                     f"product {self.parent_granule.product}"
                 )
-        return self._shot_lon_lat
+        return self._shot_geolocations
+
 
     @property
     def main_data(self) -> gpd.GeoDataFrame:
@@ -425,7 +404,7 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
             "delta_time": self["delta_time"][:],
             "absolute_time": (
                 gedi_l4a_count_start
-                + pd.to_timedelta(list(self["delta_time"]), unit="seconds")
+                + pd.to_timedelta(self["delta_time"], unit="seconds")
             ),
             # Quality data
             "sensitivity": self["sensitivity"][:],
@@ -475,7 +454,7 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
             "delta_time": self["delta_time"][:],
             "absolute_time": (
                 gedi_l2a_count_start
-                + pd.to_timedelta(list(self["delta_time"]), unit="seconds")
+                + pd.to_timedelta(self["delta_time"], unit="seconds")
             ),
             # Quality data
             "sensitivity": self["sensitivity"][:],
