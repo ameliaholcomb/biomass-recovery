@@ -18,13 +18,13 @@ LOG_PATH = PROJECT_PATH / "logs"
 LOG_PATH.mkdir(parents=True, exist_ok=True)
 
 #  Data related paths
-USER_PATH = Path("/gws/nopw/j04/forecol/svm34")
-DATA_PATH = Path("/gws/nopw/j04/forecol/data")
-SCRATCH_PATH = Path("/work/scratch-nopw/forecol")
+DATA_PATH = Path("/home/forecol/data")
+USER_PATH = Path(os.getenv("USER_PATH"))
 
 GEDI_PATH = DATA_PATH / "GEDI"
 GEDI_L1B_PATH = GEDI_PATH / "level1B"
 GEDI_L2A_PATH = GEDI_PATH / "level2A"
+GEDI_L4A_PATH = GEDI_PATH / "level4A"
 JRC_PATH = DATA_PATH / "JRC"
 PLANET_PATH = DATA_PATH / "Planet"
 PAISAGENSLIDAR_PATH = DATA_PATH / "Paisagenslidar"
