@@ -12,11 +12,10 @@ import geopandas.array
 import h5py
 import numpy as np
 import pandas as pd
-import shapely.geometry
+from shapely.geometry import box
 import xarray
 
 from src.constants import WGS84
-
 
 @dataclass
 class GediNameMetadata:
@@ -241,6 +240,9 @@ class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
     def list_beams(self) -> list[GediBeam]:
         return list(self.iter_beams())
 
+    def close(self) -> None:
+        super().close()
+
     def __repr__(self) -> str:
         try:
             description = (
@@ -267,12 +269,29 @@ class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
         return description
 
 
-class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
-    def __init__(self, granule: GediGranule, beam_name: str):
+class GediBeam(h5py.Group):
+    """
+    Class containing GEDI data for a single beam of a granule.
+
+    Args:
+        granule: The parent granule for this beam
+        beam name: The name of this beam, e.g. BEAM0000
+        roi (optional): A bounding box for the region of interest.
+            GEDI granule files include the entire global granule track,
+            which is often not needed for a small region of interest. If
+            a bounding box is provided, this class will *attempt* to perform
+            optimizations such that computationally intensive data parsing 
+            operations take place only on the data within the region of interest.
+            This will result in ONLY shots falling within the roi being included
+            in the cached data (returned by main_data
+            To re-parse the file with a new roi, use beam.reset_roi().
+    """
+    def __init__(self, granule: GediGranule, beam_name: str, roi: box = None):
         super().__init__(granule[beam_name].id)
         self.parent_granule = granule  # Reference to parent granule
         self._cached_data = None
         self._shot_geolocations = None
+        self.roi = roi
 
     def list_datasets(self, top_level_only: bool = True) -> list[str]:
         if top_level_only:
@@ -365,10 +384,16 @@ class GediBeam(h5py.Group):  # TODO  pylint: disable=missing-class-docstring
         if self._cached_data is None:
             data = self._get_main_data_dict()
             geometry = self.shot_geolocations
-
             self._cached_data = gpd.GeoDataFrame(data, geometry=geometry, crs=WGS84)
 
         return self._cached_data
+
+    def reset_roi(self, new_roi: box = None) -> None:
+        if new_roi == self.roi:
+            return None
+        self.roi = new_roi
+        self._cached_data = None
+
 
     def _get_main_data_dict(self) -> dict:
         """Returns correct main data depending on product"""
