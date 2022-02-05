@@ -106,7 +106,8 @@ def compute_last_observation(
     else:
         last_observation = xr.zeros_like(annual_change[0])
 
-    # Compute last year of observation (Note: Due to the size of the datasets this takes
+    # Compute last year in which a given JRC class value was observed
+    #  (Note: Due to the size of the datasets this takes
     #  ~10 min, even with numba speedup)
     last_observation.data = last_of_value(annual_change.data, value=jrc_class_value)
 
