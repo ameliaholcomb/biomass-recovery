@@ -1,5 +1,5 @@
 import datetime as dt
-
+from collections import defaultdict
 from requests.models import HTTPError
 import geopandas as gpd
 import pandas as pd
@@ -17,7 +17,8 @@ CMR_PROJECT_IDS = {
     "gedi_l2a": "C1908348134-LPDAAC_ECS",   # v002
     "gedi_l2b": "C1908350066-LPDAAC_ECS",   # v002
     "gedi_l3a": "C2153683336-ORNL_CLOUD",
-    "gedi_l4a": "C2114031882-ORNL_CLOUD",
+    # "gedi_l4a": "C2114031882-ORNL_CLOUD", # They have decided to change this??
+    "gedi_l4a": "C2191500133-ORNL_CLOUD",
 }
 
 def _get_cmr_id(product: str) -> str:
@@ -42,16 +43,16 @@ def _construct_temporal_params(
     }
 
 def _construct_spatial_params(spatial: gpd.GeoSeries) -> str:
-    params = {}
+    params = defaultdict(list)
     for elem in spatial:
         if elem.geom_type == 'MultiPolygon':
             params.update(_construct_spatial_params(elem.geoms))
         elif elem.geom_type == 'Polygon':
             if len(elem.interiors) != 0:
                 raise ValueError(f"Must use a shapefile for a polygon with holes")
-            params.update({
-                'polygon[]': ','.join([','.join(map(str, e)) for e in elem.exterior.coords])
-            })
+            params['polygon[]'].append(
+                ','.join([','.join(map(str, e)) for e in elem.exterior.coords])
+            )
         else:
             raise TypeError(f"Unsupported spatial type {elem.geom_type}")
     params['options[polygon][or]'] =  'true'
@@ -74,6 +75,8 @@ def _construct_query_params(
     page_size: int = 2000,
     page_num: int = 1) -> Tuple[Optional[Dict], Dict]:
     """Constructs query parameters and data for a request to the CMR API.
+    See https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html
+    for details.
     
     Returns: 
         cmr_files: param dictionary for shapefiles to submit with API request.
