@@ -16,6 +16,7 @@ from src.constants import WGS84, DB_CONFIG
 
 logger = logging.get_logger("data_logger", INFO)
 
+
 class FileTracker(object):
 
     def __init__(self, dir: Path, checkpoint_file: Path):
@@ -43,7 +44,7 @@ class FileTracker(object):
             fp.write(f"{file}\n")
         return
     
-def _parse_file(file: Path) -> gpd.GeoDataFrame:
+def parse_file(file: Path) -> gpd.GeoDataFrame:
     granule = GediGranule(file)
     granule_data = []
     for beam in tqdm(granule.iter_beams(), total=granule.n_beams):
@@ -58,7 +59,7 @@ def _parse_file(file: Path) -> gpd.GeoDataFrame:
     granule.close()
     return gdf
 
-def _filter_granules(gdf: gpd.GeoDataFrame, roi: Optional[gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
+def filter_granules(gdf: gpd.GeoDataFrame, roi: Optional[gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
     # Filter for shots where the algorithm was runnable
     gdf = gdf[gdf.algorithm_run_flag == 1]
     if roi is None:
@@ -99,8 +100,8 @@ def bulk_import_from_directory(dir: Path, roi: Optional[gpd.GeoDataFrame], table
     check_duplicates = restore
 
     for file in tqdm(file_tracker.remaining_files):
-        gdf = _parse_file(file)
-        gdf = _filter_granules(gdf, roi)
+        gdf = parse_file(file)
+        gdf = filter_granules(gdf, roi)
         _to_postgis(gdf, table_name, table, engine, check_duplicates)
         file_tracker.mark_file_completed(file)
         check_duplicates = False

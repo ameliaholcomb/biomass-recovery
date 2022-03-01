@@ -7,22 +7,24 @@ from pathlib import Path
 import requests
 from shapely.geometry import MultiPolygon, Polygon
 from typing import Dict, Optional, Tuple
+from src.constants import GediProduct
 
 
 CMR_URL = 'https://cmr.earthdata.nasa.gov/search/'
 GRANULE_SEARCH_URL = CMR_URL + 'granules.json'
 CMR_DT_FORMAT = '%Y-%m-%dT%H:%M:%SZ' 
 CMR_PROJECT_IDS = {
-    "gedi_l1b": "C1908344278-LPDAAC_ECS",   # v002
-    "gedi_l2a": "C1908348134-LPDAAC_ECS",   # v002
-    "gedi_l2b": "C1908350066-LPDAAC_ECS",   # v002
-    "gedi_l3a": "C2153683336-ORNL_CLOUD",
-    "gedi_l4a": "C2114031882-ORNL_CLOUD",
+    GediProduct.L1B: "C1908344278-LPDAAC_ECS",   # v002
+    GediProduct.L2A: "C1908348134-LPDAAC_ECS",   # v002
+    GediProduct.L2B: "C1908350066-LPDAAC_ECS",   # v002
+    GediProduct.L3: "C2153683336-ORNL_CLOUD",
+    # "gedi_l4a": "C2114031882-ORNL_CLOUD", # They have decided to change this??
+    GediProduct.L4A: "C2191500133-ORNL_CLOUD",
 }
 
-def _get_cmr_id(product: str) -> str:
-    if CMR_PROJECT_IDS.get(product.lower()):
-        return CMR_PROJECT_IDS[product.lower()]
+def _get_cmr_id(product: GediProduct) -> str:
+    if CMR_PROJECT_IDS.get(product):
+        return CMR_PROJECT_IDS[product]
     else:
         raise ValueError("Product {} not supported".format(product))
 
@@ -67,7 +69,7 @@ def _check_shapefile(shapefile: Path) -> None:
     return
 
 def _construct_query_params(
-    product: str,
+    product: GediProduct,
     date_range: Optional[Tuple[dt.datetime, dt.datetime]],
     shapefile: Optional[Path],
     spatial: Optional[gpd.GeoSeries],
@@ -148,7 +150,7 @@ def _parse_granules(granules):
     return granule_array
 
 def query(
-    product: str,
+    product: GediProduct,
     date_range: Optional[Tuple[dt.datetime, dt.datetime]] = None,
     shapefile: Optional[Path] = None,
     spatial: Optional[gpd.GeoSeries] = None,
