@@ -41,9 +41,12 @@ GEDI_L1B_PATH = gedi_product_path(GediProduct.L1B)
 GEDI_L2A_PATH = gedi_product_path(GediProduct.L2A)
 GEDI_L4A_PATH = gedi_product_path(GediProduct.L4A)
 JRC_PATH = DATA_PATH / "JRC"
+ENV_VARS_PATH = DATA_PATH / "EnvVars"
 PLANET_PATH = DATA_PATH / "Planet"
 PAISAGENSLIDAR_PATH = DATA_PATH / "Paisagenslidar"
 EBALIDAR_PATH = DATA_PATH / "EBA_lidar"
+
+ENV_VARS_NAMES = ['defMean', 'SCCsoil', 'fpar', 'lightning', 'srtm']
 
 # ---------------- API KEYS -------------------------
 PLANET_API_KEY = os.getenv("PLANET_API_KEY")
