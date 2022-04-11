@@ -9,6 +9,7 @@ from geopandas import gpd
 import datetime as dt
 import subprocess
 from shapely.geometry import box
+from shapely.geometry.polygon import orient
 import tempfile
 import os.path
 import shutil
@@ -18,21 +19,22 @@ from src.data.gedi_cmr_query import query
 from src.data import gedi_database_loader
 from src import constants
 from functools import partial
+from typing import List
+
+DB_URL = 'postgresql://sherwood:@aello.cl.cam.ac.uk:5432/postgres'
 
 
 def _get_engine():
     # Since spark runs workers in their own process, we cannot share database connections
     # between workers. We just create a new connection for each query. This is reasonable because
     # most of our queries involve inserting a large amount of data into the database.
-    return sqlalchemy.create_engine(constants.DB_CONFIG, echo=False)
+    return sqlalchemy.create_engine(DB_URL, echo=False)
 
 
-def _query_granule_metadata(bound, product):
-    granules_metadata = query(
-        product=product,
-        spatial=bound,
-    )
-    return granules_metadata
+def _query_granule_metadata(bounds, product):
+    granule_metadatas = [query(product=product, spatial=bound)
+                         for bound in bounds]
+    return pd.concat(granule_metadatas)
 
 
 def _download_url(product, input):
@@ -85,14 +87,16 @@ def _write_db(product, gedi_data):
         if gedi_data.empty:
             return
         gedi_data = gedi_data.astype({'shot_number': 'int64'})
-
-        granule_name = gedi_data['granule_name'].head(1)
-        granule_name.to_sql(name=_granules_table(
+        granules_entry = pd.DataFrame(data={
+            'granule_name': [gedi_data['granule_name'].head(1).item()],
+            'created_date': [pd.Timestamp.utcnow()],
+        })
+        granules_entry.to_sql(name=_granules_table(
             product), con=con, index=False, if_exists="append")
 
         gedi_data.to_postgis(name=_product_table(product), con=con,
                              index=False, if_exists="append")
-    return granule_name
+    return granules_entry
 
 
 def _product_table(product):
@@ -110,7 +114,7 @@ def _query_downloaded(table_name):
         "granule_name"], con=_get_engine())
 
 
-def exec_spark(bounds, product, download_only):
+def exec_spark(bounds: List[gpd.GeoSeries], product: constants.GediProduct, download_only: bool):
     granule_metadata = _query_granule_metadata(
         bounds, product).drop_duplicates(subset='granule_name')
 
@@ -146,7 +150,7 @@ def exec_spark(bounds, product, download_only):
         # Filter the geodataframe for suitable shots
         filtered_files = parsed_files.map(_filter_file)
         # coalesce to 8 partitions to avoid overloading the database with many connections.
-        # The number 8 was chosen sort of randomly, could increase or decrease.
+        # The number 8 was chosen sort of arbitrarily, could increase or decrease.
         out = filtered_files.coalesce(8).map(partial(_write_db, product))
         # count forces evaluation of the rdd
         out.count()
@@ -201,6 +205,12 @@ if __name__ == '__main__':
     # # so we simplify our query to just the bounding box around the region.
     # bbox = gpd.GeoSeries(box(*shp.geometry.values[0].bounds))
     # print(shp.geometry.values[0].bounds)
+    # bbox1 = gpd.GeoSeries(box(-60, 0, -59.75, 0.10))
+    # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
+    # exec_spark([bbox1, bbox2], constants.GediProduct.L4A, download_only=False)
 
-    bbox = gpd.GeoSeries(box(-60, 0, -59.75, 0.35))
-    exec_spark(bbox, constants.GediProduct.L4A, download_only=False)
+    bbox = gpd.read_file(constants.USER_PATH /
+                         'shapefiles' / 'bbox_formatted.gpd')
+    boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
+
+    exec_spark(boxes, constants.GediProduct.L4A, download_only=False)
