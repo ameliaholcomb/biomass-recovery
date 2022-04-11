@@ -55,9 +55,11 @@ def _get_available_metrics(path: os.PathLike) -> dict:
     result = {survey_name: {}}
 
     for tif_path in tif_files:
-        metric_gridsize = tif_path.name[len(survey_name) + 1 :]
-        metric = re.findall(r"([a-z_]+[\d\.]*)_[\d\.]+m.tif", metric_gridsize)[0]
-        resolution = re.findall(r"[a-z_]+[\d\.]*_([\d\.]+)m.tif", metric_gridsize)[0]
+        metric_gridsize = tif_path.name[len(survey_name) + 1:]
+        metric = re.findall(
+            r"([a-z_]+[\d\.]*)_[\d\.]+m.tif", metric_gridsize)[0]
+        resolution = re.findall(
+            r"[a-z_]+[\d\.]*_([\d\.]+)m.tif", metric_gridsize)[0]
 
         if metric not in result[survey_name].keys():
             result[survey_name][metric] = {}
@@ -91,6 +93,41 @@ def fetch_metrics(survey_name: str) -> dict:
         return _fetch_paisagens_metrics(survey_name)
 
 
+
+
+def _open_raster_file(
+    survey_name: str,
+    metric: str,
+    grid_size: float,
+) -> xr.DataArray:
+    logger.debug("Fetching raster path")
+    available_metrics = fetch_metrics(survey_name)
+    if metric in available_metrics.keys():
+        data_path = available_metrics[metric][grid_size]
+    else:
+        raise KeyError(
+            f"No metric {metric} found. Found: {available_metrics.keys()}")
+
+    logger.debug("Loading raster %s", data_path)
+    return rxr.open_rasterio(data_path, masked=True)
+
+
+def _reproject_raster_file(
+    raster: xr.DataArray,
+    from_crs: Optional[str] = None,
+    to_crs: Optional[str] = WEBMERCATOR
+) -> xr.DataArray:
+    if from_crs is not None:
+        logger.debug("Setting crs %s", from_crs)
+        raster = raster.rio.set_crs(from_crs)
+
+    if to_crs is not None:
+        logger.debug("Reprojecting to crs %s", to_crs)
+        raster = raster.rio.reproject(to_crs)
+
+    return raster
+
+
 def load_raster(
     survey_name: str,
     metric: str,
@@ -109,22 +146,16 @@ def load_raster(
     Returns:
         xr.DataArray: The output raster as xarray object
     """
-    logger.debug("Fetching raster path")
-    available_metrics = fetch_metrics(survey_name)
-    if metric in available_metrics.keys():
-        data_path = available_metrics[metric][grid_size]
-    else:
-        raise KeyError(f"No metric {metric} found. Found: {available_metrics.keys()}")
+    return _reproject_raster_file(_open_raster_file(survey_name, metric, grid_size), from_crs, to_crs)
 
-    logger.debug("Loading raster %s", data_path)
-    raster = rxr.open_rasterio(data_path, masked=True)
 
-    if from_crs is not None:
-        logger.debug("Setting crs %s", from_crs)
-        raster = raster.rio.set_crs(from_crs)
-
-    if to_crs is not None:
-        logger.debug("Reprojecting to crs %s", to_crs)
-        raster = raster.rio.reproject(to_crs)
-
-    return raster
+def load_raster_with_resources(
+    survey_name: str,
+    metric: str,
+    grid_size: float,
+    from_crs: Optional[str] = None,
+    to_crs: Optional[str] = WEBMERCATOR,
+) -> xr.DataArray:
+    file = _open_raster_file(survey_name, metric, grid_size)
+    return _reproject_raster_file(file, from_crs, to_crs), [file]
+  
