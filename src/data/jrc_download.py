@@ -47,7 +47,7 @@ def is_already_downloaded(
     Returns:
         bool: True if tile was already downloaded. False else.
     """
-    matching_files = list(outpath.glob(f"*{dataset}*{lat}*{lon}*"))
+    matching_files = list(outpath.glob(f"*{dataset}*{lat}*{lon}.*"))
     if len(matching_files) == 0:
         return False
     elif len(matching_files) == 1:
@@ -76,7 +76,9 @@ def construct_jrc_query(dataset: str, lat: str, lon: str) -> str:
 
 def download_file(outpath: pathlib.Path, file_url: str) -> int:
     logger.info("Downloading resource %s", file_url)
-    return subprocess.call(["wget", "--content-disposition", "-P", outpath, file_url])
+    return subprocess.call(
+        ["wget", "--content-disposition", "-P", outpath, file_url]
+    )
 
 
 def download_jrc_dataset(
@@ -110,9 +112,10 @@ def download_jrc_all():
 
 if __name__ == "__main__":
 
-    use_multiple_workers = False
+    use_multiple_workers = True
 
     if use_multiple_workers:
+        print("Using multiple workers.")
         # Make sure num_workers isn't higher than available CPUs
         core_count = psutil.cpu_count(logical=False)
         dataset_count = len(JRC_DATASETS)
