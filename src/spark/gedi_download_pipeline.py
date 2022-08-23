@@ -21,19 +21,19 @@ from src import constants
 from functools import partial
 from typing import List
 
-DB_URL = 'postgresql://sherwood:@aello.cl.cam.ac.uk:5432/postgres'
 
 
 def _get_engine():
     # Since spark runs workers in their own process, we cannot share database connections
     # between workers. We just create a new connection for each query. This is reasonable because
     # most of our queries involve inserting a large amount of data into the database.
-    return sqlalchemy.create_engine(DB_URL, echo=False)
+    return sqlalchemy.create_engine(constants.DB_CONFIG, echo=False)
 
 
 def _query_granule_metadata(bounds, product):
-    granule_metadatas = [query(product=product, spatial=bound)
-                         for bound in bounds]
+    granule_metadatas = [
+        query(product=product, spatial=bound) for bound in bounds
+    ]
     return pd.concat(granule_metadatas)
 
 
@@ -44,21 +44,24 @@ def _download_url(product, input):
         return outfile_path
     try:
         temp = tempfile.NamedTemporaryFile(
-            dir=constants.gedi_product_path(product))
+            dir=constants.gedi_product_path(product)
+        )
         subprocess.run(
-            ['wget',
-             '--load-cookies',
-             constants.EARTH_DATA_COOKIE_FILE,
-             '--save-cookies',
-             constants.EARTH_DATA_COOKIE_FILE,
-             '--auth-no-challenge=on',
-             '--keep-session-cookies',
-             '--content-disposition',
-             '-nc',
-             '-O',
-             temp.name,
-             url],
-            check=True
+            [
+                "wget",
+                "--load-cookies",
+                constants.EARTH_DATA_COOKIE_FILE,
+                "--save-cookies",
+                constants.EARTH_DATA_COOKIE_FILE,
+                "--auth-no-challenge=on",
+                "--keep-session-cookies",
+                "--content-disposition",
+                "-nc",
+                "-O",
+                temp.name,
+                url,
+            ],
+            check=True,
         )
         shutil.move(temp.name, outfile_path)
     finally:
@@ -86,16 +89,26 @@ def _write_db(product, gedi_data):
     with _get_engine().begin() as con:
         if gedi_data.empty:
             return
-        gedi_data = gedi_data.astype({'shot_number': 'int64'})
-        granules_entry = pd.DataFrame(data={
-            'granule_name': [gedi_data['granule_name'].head(1).item()],
-            'created_date': [pd.Timestamp.utcnow()],
-        })
-        granules_entry.to_sql(name=_granules_table(
-            product), con=con, index=False, if_exists="append")
+        gedi_data = gedi_data.astype({"shot_number": "int64"})
+        granules_entry = pd.DataFrame(
+            data={
+                "granule_name": [gedi_data["granule_name"].head(1).item()],
+                "created_date": [pd.Timestamp.utcnow()],
+            }
+        )
+        granules_entry.to_sql(
+            name=_granules_table(product),
+            con=con,
+            index=False,
+            if_exists="append",
+        )
 
-        gedi_data.to_postgis(name=_product_table(product), con=con,
-                             index=False, if_exists="append")
+        gedi_data.to_postgis(
+            name=_product_table(product),
+            con=con,
+            index=False,
+            if_exists="append",
+        )
     return granules_entry
 
 
@@ -106,38 +119,48 @@ def _product_table(product):
 
 
 def _granules_table(product):
-    return _product_table(product) + '_granules'
+    return _product_table(product) + "_granules"
 
 
 def _query_downloaded(table_name):
-    return pd.read_sql_table(table_name=table_name, columns=[
-        "granule_name"], con=_get_engine())
+    return pd.read_sql_table(
+        table_name=table_name, columns=["granule_name"], con=_get_engine()
+    )
 
 
-def exec_spark(bounds: List[gpd.GeoSeries], product: constants.GediProduct, download_only: bool):
-    granule_metadata = _query_granule_metadata(
-        bounds, product).drop_duplicates(subset='granule_name')
+def exec_spark(
+    bounds: List[gpd.GeoSeries],
+    product: constants.GediProduct,
+    download_only: bool,
+):
+    granule_metadata = _query_granule_metadata(bounds, product).drop_duplicates(
+        subset="granule_name"
+    )
 
     if download_only:
         required_granules = granule_metadata
     else:
         stored_granules = _query_downloaded(_granules_table(product))
-        required_granules = granule_metadata.loc[~granule_metadata['granule_name'].isin(
-            stored_granules['granule_name'])]
+        required_granules = granule_metadata.loc[
+            ~granule_metadata["granule_name"].isin(
+                stored_granules["granule_name"]
+            )
+        ]
 
     if required_granules.empty:
         print("No granules required")
         return
 
-    print("Total granules found: ", len(granule_metadata.index)-1)
-    print("Total file size (MB): ", granule_metadata['granule_size'].sum())
-    print("Required granules found: ", len(required_granules.index)-1)
-    print("Required file size (MB): ", required_granules['granule_size'].sum())
+    print("Total granules found: ", len(granule_metadata.index) - 1)
+    print("Total file size (MB): ", granule_metadata["granule_size"].sum())
+    print("Required granules found: ", len(required_granules.index) - 1)
+    print("Required file size (MB): ", required_granules["granule_size"].sum())
 
     # Spark starts here
     spark = SparkSession.builder.getOrCreate()
-    name_url = required_granules[["granule_name",
-                                 "granule_url"]].to_records(index=False)
+    name_url = required_granules[["granule_name", "granule_url"]].to_records(
+        index=False
+    )
     urls = spark.sparkContext.parallelize(name_url)
     # Download the files to a stable location and return the file name
     files = urls.map(partial(_download_url, product))
@@ -196,7 +219,7 @@ def exec_spark(bounds: List[gpd.GeoSeries], product: constants.GediProduct, down
 #     created_date timestamptz
 # );
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # AMAZON SHAPEFILE
     # shapefile = USER_PATH / 'shapefiles' / 'Amazon_rainforest_shapefile.zip'
     # shp = gpd.read_file(shapefile)
@@ -209,8 +232,9 @@ if __name__ == '__main__':
     # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
     # exec_spark([bbox1, bbox2], constants.GediProduct.L4A, download_only=False)
 
-    bbox = gpd.read_file(constants.USER_PATH /
-                         'shapefiles' / 'bbox_formatted.gpd')
+    bbox = gpd.read_file(
+        constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
+    )
     boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
 
     exec_spark(boxes, constants.GediProduct.L4A, download_only=False)

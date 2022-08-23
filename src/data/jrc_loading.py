@@ -26,7 +26,9 @@ JRC_DATASETS = (
 )
 
 
-def _to_nesw(lon: float, lat: float) -> tuple[tuple[float, float], tuple[str, str]]:
+def _to_nesw(
+    lon: float, lat: float
+) -> tuple[tuple[float, float], tuple[str, str]]:
     lon_ew = "W" if lon < 0 else "E"
     lat_ns = "S" if lat < 0 else "N"
     return (abs(lon), abs(lat)), (lon_ew, lat_ns)
@@ -106,8 +108,8 @@ def get_jrc_paths(
             f"*_{str(year) + '_*_' if year is not None else ''}{tile}*.tif",
         )
         logger.debug("Relevant tiles %s", relevant_tiles)
-        assert len(
-            relevant_tiles) == 1, f"Found no relevant tile {tile} for {dataset}."
+        if not (len(relevant_tiles) == 1):
+            raise ValueError(f"Found no relevant tile {tile} for {dataset}.")
         tile_paths.append(relevant_tiles[0])
 
     return tile_paths
@@ -121,7 +123,9 @@ def load_jrc_data(
     dataset: str = "DeforestationYear",
     years: Optional[int] = None,
 ) -> Tuple[xr.DataArray, List[xr.DataArray]]:
-    return load_jrc_data_with_resources(min_lon, min_lat, max_lon, max_lat, dataset, years)[0]
+    return load_jrc_data_with_resources(
+        min_lon, min_lat, max_lon, max_lat, dataset, years
+    )[0]
 
 
 def load_jrc_data_with_resources(
@@ -147,27 +151,32 @@ def load_jrc_data_with_resources(
             raise NotImplementedError("Boundaries overlap multiple tiles")
 
         files_with_year = [
-            (year, rxr.open_rasterio(tile_path[0])) for year, tile_path in
-            zip(years, tile_paths)
+            (year, rxr.open_rasterio(tile_path[0]))
+            for year, tile_path in zip(years, tile_paths)
         ]
 
         annual_change = xr.concat(
-            [file.rio.slice_xy(min_lon, min_lat, max_lon, max_lat) .squeeze().assign_coords({"year": year})
-             for year, file in tqdm(files_with_year)],
-            dim="year")
+            [
+                file.rio.slice_xy(min_lon, min_lat, max_lon, max_lat)
+                .squeeze()
+                .assign_coords({"year": year})
+                for year, file in tqdm(files_with_year)
+            ],
+            dim="year",
+        )
 
         files = [file for _, file in files_with_year] + [annual_change]
         return annual_change, files
 
     # Treat all other datasets
     tile_paths = get_jrc_paths(
-        min_lon, min_lat, max_lon, max_lat, dataset, years)
+        min_lon, min_lat, max_lon, max_lat, dataset, years
+    )
     if len(tile_paths) == 1:
         file = rxr.open_rasterio(tile_paths[0])
         return (
-            file
-            .rio.slice_xy(min_lon, min_lat, max_lon, max_lat)
-            .squeeze(), [file]
+            file.rio.slice_xy(min_lon, min_lat, max_lon, max_lat).squeeze(),
+            [file],
         )
     else:
         raise NotImplementedError("Boundaries overlap multiple tiles")
