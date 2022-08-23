@@ -82,12 +82,12 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
     survey_name = args.survey_name
-    save_dir = pathlib.Path(args.save_path)
-    assert save_dir.exists()
+    save_path = pathlib.Path(args.save_path)
+    assert save_path.parent.exists()
 
     files = _get_files(survey_name)
     if len(files) == 0:
         print('No files found for survey; exiting')
         exit(1)
     df = exec_spark(files)
-    df.to_feather(save_dir / f'{survey_name}_recovery_analysis.feather')
+    df.to_feather(save_path)
