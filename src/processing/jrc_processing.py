@@ -20,77 +20,80 @@ JRC_ANNUAL_CHANGE_UNDISTURBED = 1
 JRC_ANNUAL_CHANGE_DEGRADATION = 2
 JRC_ANNUAL_CHANGE_DEFORESTATION = 3
 JRC_ANNUAL_CHANGE_RECOVERY = 4
+JRC_ANNUAL_CHANGE_OTHER_LAND_USE = 6
 
 
-@numba.njit
 def last_of_value(
     array: np.ndarray,
     value: Union[int, float],
+    axis: int = 0,
     fill_value: Union[int, float] = -9999,
-    dtype: type = np.int16,
 ) -> np.ndarray:
     """
-    Find index of last occurence of `value` along the first axis of the array.
+    Find index of last occurence of `value` along the ith axis of the array.
 
     Args:
-        array (np.ndarray): The 3D numpy array to investigate. The shape should be
-            (obervations, rows, columns)
-        value (Union[int, float]): The value for whichs last occurence should be noted
+        array (np.ndarray): The numpy array to investigate.
+        values (Union[int,float]): The value for which last occurence should be noted
+        axis (int): The axis on which to search.
+            e.g. for an array shaped (observations, rows, cols) use axis = 0
         fill_value (Union[int, float], optional): Fill value if `value` is not found
-            along the first axis. Defaults to -9999.
-        dtype (type, optional): The return datatype. Should be an integer type, since
-            we deal with indices. Defaults to np.int16.
+            along the first axis. Defaults to -9999
 
     Returns:
-        np.array: A 2D numpy array of shape (rows, columns) and the value of the element
-            [row, column] will be the last occurence of `value` in `array` (or
-            `fill_value` if the value doesn't occur.)
+        np.array: An array of one less dimension than the input, with values set to
+            the last occurence of `value` in `array` along `axis`
+            (or `fill_value` if the value doesn't occur.)
+            e.g. for an array (observations, rows, cols), axis = 0
+            return array will be of shape (rows, cols)
     """
-    assert len(array.shape) == 3, "This function assumes a 3d array"
-    _, nrows, ncols = array.shape
-    last_observation = np.ones_like(array[0], dtype=dtype) * fill_value
-    for row in range(nrows):
-        for col in range(ncols):
-            value_observations = np.argwhere(array[:, row, col] == value)
-            if len(value_observations) > 0:
-                last_observation[row, col] = value_observations.max()
-
+    # Compute the last observation as follows:
+    # [ 0 1 3 1 7 5 ]       // array along the ith axis
+    # [ F T F T F F ]       // array == value (value = 1)
+    # [ F F T F T F ]       // .flip()
+    # [ 2 ]                 // maximum values occur at True, when array == value
+    #                       // argmax() returns the first occurence of the maximum value.
+    #                       // we wanted the *last*, which is why we needed the flip.
+    # 6 - 1 - 2 = 3         // subtract to get the index in the un-flipped original array
+    last_observation = (
+        array.shape[axis]
+        - 1
+        - (np.argmax(np.flip(array == value, axis=axis), axis=axis))
+    )
+    # We cannot distinguish between value not found and value found in the last index
+    # So explicitly set fill_value for all rows where the value was not found
+    last_observation[~np.any(array == value, axis=axis)] = fill_value
     return last_observation
 
 
-@numba.njit
 def first_of_value(
     array: np.ndarray,
     value: Union[int, float],
+    axis: int = 0,
     fill_value: Union[int, float] = -9999,
-    dtype: type = np.int16,
 ) -> np.ndarray:
     """
-    Find index of first occurence of `value` along the first axis of the array.
+    Find index of first occurence of `value` along the ith axis of the array.
 
     Args:
-        array (np.ndarray): The 3D numpy array to investigate. The shape should be
-            (obervations, rows, columns)
-        value (Union[int, float]): The value for whichs first occurence should be noted
+        array (np.ndarray): The numpy array to investigate.
+        value (Union[int, float]): The value for whichs last occurence should be noted
+        axis (int): The axis on which to search.
+            e.g. for an array shaped (observations, rows, cols) use axis = 0
         fill_value (Union[int, float], optional): Fill value if `value` is not found
-            along the first axis. Defaults to -9999.
-        dtype (type, optional): The return datatype. Should be an integer type, since
-            we deal with indices. Defaults to np.int16.
+            along the first axis. Defaults to -9999
 
     Returns:
-        np.array: A 2D numpy array of shape (rows, columns) and the value of the element
-            [row, column] will be the first occurence of `value` in `array` (or
-            `fill_value` if the value doesn't occur.)
+        np.array: An array of one less dimension than the input, with values set to
+            the first occurence of `value` in `array` along `axis`
+            (or `fill_value` if the value doesn't occur.)
+            e.g. for an array (observations, rows, cols), axis = 0
+            return array will be of shape (rows, cols)
     """
-    assert len(array.shape) == 3, "This function assumes a 3d array"
-    _, nrows, ncols = array.shape
-    first_observation = np.ones_like(array[0], dtype=dtype) * fill_value
-    for row in range(nrows):
-        for col in range(ncols):
-            value_observations = np.argwhere(array[:, row, col] == value)
-            if len(value_observations) > 0:
-                first_observation[row, col] = value_observations.min()
-
+    first_observation = np.argmax(array == value, axis=axis)
+    # We cannot distinguish between value not found and value found in the last index
+    # So explicitly set fill_value for all rows where the value was not found
+    first_observation[~np.any(array == value, axis=axis)] = fill_value
     return first_observation
 
 
@@ -107,17 +110,19 @@ def compute_last_observation(
         last_observation = xr.zeros_like(annual_change[0])
 
     # Compute last year in which a given JRC class value was observed
-    #  (Note: Due to the size of the datasets this takes
-    #  ~10 min, even with numba speedup)
-    last_observation.data = last_of_value(annual_change.data, value=jrc_class_value)
+    last_observation.data = last_of_value(
+        annual_change.data, value=jrc_class_value, axis=0
+    )
 
     # Fix all negative/fill values and all values prior to 1990 with the first year of
-    #  deforestation.
+    #  deforestation (JRC Deforestation/DegradationYear dataset goes back to 1982)
     if first_observation is not None:
         last_year = annual_change.year.data[-1]
         last_observation = xr.concat(
             [
-                first_observation.where(first_observation <= last_year, other=0),
+                first_observation.where(
+                    first_observation <= last_year, other=0
+                ),
                 last_observation + year_offset,
             ],
             dim="observations",
@@ -127,7 +132,7 @@ def compute_last_observation(
             last_observation > 0, other=0
         )
 
-    return last_observation.astype(float)
+    return last_observation.astype(np.int16)
 
 
 def compute_recovery_period(
@@ -135,27 +140,57 @@ def compute_recovery_period(
     first_deforestation: Optional[xr.DataArray] = None,
     first_degradation: Optional[xr.DataArray] = None,
     as_startyear: bool = False,
+    include_degraded: bool = False,
+    include_nonforest: bool = False,
 ):
 
     last_deforested = compute_last_observation(
-        annual_change, JRC_ANNUAL_CHANGE_DEFORESTATION, first_deforestation
+        annual_change,
+        JRC_ANNUAL_CHANGE_DEFORESTATION,
+        first_deforestation,
     )
-    last_degraded = compute_last_observation(
-        annual_change, JRC_ANNUAL_CHANGE_DEGRADATION, first_degradation
-    )
+
+    if include_nonforest:
+        last_nonforest = compute_last_observation(
+            annual_change,
+            JRC_ANNUAL_CHANGE_OTHER_LAND_USE,
+        )
+        last_deforested.data = np.maximum(
+            last_deforested.data, last_nonforest.data
+        )
+
+    if not include_degraded:
+        last_degraded = compute_last_observation(
+            annual_change, JRC_ANNUAL_CHANGE_DEGRADATION, first_degradation
+        )
 
     survey_year = annual_change.year.data[-1]
-    deforested_before_survey = last_deforested < survey_year
-    not_degraded_since_last_deforested = last_deforested > last_degraded
+    deforested_before_survey = (last_deforested < survey_year) & (
+        last_deforested != 0
+    )
+    if not include_degraded:
+        not_degraded_since_last_deforested = last_deforested > last_degraded
+
     recovering = annual_change.loc[survey_year] == JRC_ANNUAL_CHANGE_RECOVERY
 
-    undisturbed_recovery = (
-        recovering & deforested_before_survey & not_degraded_since_last_deforested
-    )
+    if not include_degraded:
+        # Consider only undisturbed recovery: no further disturbance since last deforested
+        recovery = (
+            recovering
+            & deforested_before_survey
+            & not_degraded_since_last_deforested
+        )
+    else:
+        # TODO: should not need to be recovering currently -- just was recovering for some time, then degraded but not deforested again.
+        # Doesn't seem like the recovering-degraded-etc transition happens a lot, at least with this classification scheme
+        # For future work, we probably want to use the underlying disturbance classifications (available on GEE) to understand how the disturbance and regrowth classes interact?
+        # If this doesn't work then ... it's an opportunity to detect it for the first time haha
+        recovery = recovering & deforested_before_survey
 
     if as_startyear:
-        return last_deforested.where(undisturbed_recovery)
-    return survey_year - last_deforested.where(undisturbed_recovery)
+        return last_deforested.where(recovery)
+    # years since last deforested or nan if not recovering
+    return survey_year - last_deforested.where(recovery)
 
 
 # pylint: disable=redefined-outer-name
@@ -164,7 +199,7 @@ def calculate_jrc_last_observation_year(
     jrc_class_value: int = JRC_ANNUAL_CHANGE_DEFORESTATION,  # 3 is deforestation class
     dataset: str = "DeforestationYear",
     overwrite: bool = False,
-    final_year: int = 2019,
+    final_year: int = 2021,
 ) -> bool:
     """
     Calculates the year of last observation of `jrc_class_value`in the JRC AnnualChange
@@ -200,7 +235,7 @@ def calculate_jrc_last_observation_year(
     first_observation_path = (
         JRC_PATH
         / dataset
-        / f"JRC_TMF_{dataset}_v1_1982_{final_year}_{tile_identifier}.tif"
+        / f"JRC_TMF_{dataset}_INT_1982_{final_year}_{tile_identifier}.tif"
     )
     annual_change_paths = {
         year: (
@@ -227,7 +262,7 @@ def calculate_jrc_last_observation_year(
     save_path = (
         JRC_PATH
         / f"Last{dataset}"
-        / f"JRC_TMF_Last{dataset}_v1_1982_2019_{tile_identifier}.tif"
+        / f"JRC_TMF_Last{dataset}_v1_1982_{final_year}_{tile_identifier}.tif"
     )
     if save_path.exists() and not overwrite:
         raise FileExistsError(
@@ -267,7 +302,9 @@ def calculate_jrc_last_observation_year(
 
 if __name__ == "__main__":
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="GEDI order download script")
+    parser = argparse.ArgumentParser(
+        description="JRC processing scripts (LastDeforestation/DegradationYear)"
+    )
     parser.add_argument(
         "-v",
         "--jrc_class_value",
@@ -294,16 +331,14 @@ if __name__ == "__main__":
         nargs="?",  # Argument is optional
     )
     parser.add_argument(
-        "-o",
         "--overwrite",
         help=(
-            "If True, existing files are downloaded again and overwritten. "
-            "Defaults to False."
+            "If set, existing files are downloaded again and overwritten. "
+            "Turned off by default."
         ),
-        type=bool,
-        default=False,
-        nargs="?",  # Argument is optional
+        action=argparse.BooleanOptionalAction,
     )
+    parser.set_defaults(overwrite=False)
 
     args = parser.parse_args()
 

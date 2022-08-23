@@ -58,6 +58,10 @@ def quality_judge(arr: np.array) -> np.array:
                 patch = arr[row - 1: row + 2, col - 1: col + 2]
                 if np.prod(patch.flatten() >= 0):
                     if np.prod(patch.flatten() == patch[0, 0]):
+                        quality[row, col] = 4
+                    elif abs(patch.max() - patch.min()) <= 1:
+                        quality[row, col] = 3
+                    elif abs(patch.max() - patch.min()) <= 2:
                         quality[row, col] = 2
                     else:
                         quality[row, col] = 1
@@ -198,4 +202,3 @@ def compute_recovery_dataset(
                 logging.error(
                     'Received error while closing file: {}'.format(e))
         gc.collect()
-        
