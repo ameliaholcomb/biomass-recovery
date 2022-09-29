@@ -1,5 +1,6 @@
 #! /home/ah2174/biomass-recovery/venv/bin/python
 import pathlib
+from turtle import down
 from pyspark.sql import SparkSession
 
 
@@ -158,7 +159,10 @@ def exec_spark(
         required_granules["granule_size"].sum(),
     )
 
-    input("To proceed to download and ingest this data, press ENTER >>> ")
+    if download_only:
+        input("To proceed to download this data, press ENTER >>> ")
+    else:
+        input("To proceed to download AND INGEST this data, press ENTER >>> ")
 
     # Spark starts here
     spark = SparkSession.builder.getOrCreate()
@@ -230,6 +234,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--shapefile",
         help="Shapefile (zip) containing the world region to download.",
+        type=str,
     )
     parser.add_argument(
         "--download_only",
@@ -237,7 +242,9 @@ if __name__ == "__main__":
             "Only download the raw granule files to shared location."
             "Do not also ingest the data into PostGIS database."
         ),
+        action=argparse.BooleanOptionalAction,
     )
+    parser.set_defaults(download_only=False)
     args = parser.parse_args()
 
     shapefile = pathlib.Path(args.shapefile)
