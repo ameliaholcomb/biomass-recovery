@@ -1,3 +1,4 @@
+#! /home/ah2174/biomass-recovery/venv/bin/python
 import pathlib
 from pyspark.sql import SparkSession
 
@@ -134,6 +135,8 @@ def exec_spark(
     granule_metadata = _query_granule_metadata(bounds, product).drop_duplicates(
         subset="granule_name"
     )
+    print("Total granules found: ", len(granule_metadata.index) - 1)
+    print("Total file size (MB): ", granule_metadata["granule_size"].sum())
 
     if download_only:
         required_granules = granule_metadata
@@ -149,8 +152,6 @@ def exec_spark(
         print("No granules required")
         return
 
-    print("Total granules found: ", len(granule_metadata.index) - 1)
-    print("Total file size (MB): ", granule_metadata["granule_size"].sum())
     print("Granules to download: ", len(required_granules.index) - 1)
     print(
         "File size to download (MB): ",
