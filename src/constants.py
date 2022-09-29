@@ -5,6 +5,7 @@ from pathlib import Path
 from enum import Enum
 
 import dotenv
+
 dotenv.load_dotenv()
 
 
@@ -16,12 +17,13 @@ class GediProduct(Enum):
     L4A = "level4A"
     L4B = "level4B"
 
+
 # ---------------- PATH CONSTANTS -------------------
 #  Source folder path
 constants_path = Path(__file__)
 SRC_PATH = constants_path.parent
 PROJECT_PATH = SRC_PATH.parent
-CONDA_ENV = os.getenv('CONDA_DEFAULT_ENV')
+CONDA_ENV = os.getenv("CONDA_DEFAULT_ENV")
 
 # Log relatedd paths
 LOG_PATH = PROJECT_PATH / "logs"
@@ -30,12 +32,16 @@ LOG_PATH.mkdir(parents=True, exist_ok=True)
 #  Data related paths
 DATA_PATH = Path(os.getenv("DATA_PATH"))
 USER_PATH = Path(os.getenv("USER_PATH"))
-EARTH_DATA_COOKIE_FILE = os.getenv("EARTH_DATA_COOKIE_FILE")
+EARTHDATA_USER = os.getenv("EARTHDATA_USER")
+EARTHDATA_PASSWORD = os.getenv("EARTHDATA_PASSWORD")
+EARTH_DATA_COOKIE_FILE = Path(os.getenv("EARTH_DATA_COOKIE_FILE"))
 
 GEDI_PATH = DATA_PATH / "GEDI"
 
+
 def gedi_product_path(product):
     return GEDI_PATH / product.value
+
 
 GEDI_L1B_PATH = gedi_product_path(GediProduct.L1B)
 GEDI_L2A_PATH = gedi_product_path(GediProduct.L2A)
@@ -46,7 +52,7 @@ PLANET_PATH = DATA_PATH / "Planet"
 PAISAGENSLIDAR_PATH = DATA_PATH / "Paisagenslidar"
 EBALIDAR_PATH = DATA_PATH / "EBA_lidar"
 
-ENV_VARS_NAMES = ['defMean', 'SCCsoil', 'fpar', 'lightning', 'srtm']
+ENV_VARS_NAMES = ["defMean", "SCCsoil", "fpar", "lightning", "srtm"]
 
 # ---------------- API KEYS -------------------------
 PLANET_API_KEY = os.getenv("PLANET_API_KEY")
