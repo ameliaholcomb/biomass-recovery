@@ -1,4 +1,5 @@
 #! /home/ah2174/biomass-recovery/venv/bin/python
+import os
 import pathlib
 from turtle import down
 from pyspark.sql import SparkSession
@@ -12,7 +13,6 @@ import subprocess
 from shapely.geometry import box
 from shapely.geometry.polygon import orient
 import tempfile
-import os.path
 import shutil
 import sqlalchemy
 
@@ -30,6 +30,39 @@ def _get_engine():
     return sqlalchemy.create_engine(constants.DB_CONFIG, echo=False)
 
 
+def _fetch_cookies():
+    print("No authentication cookies found, fetching earthdata cookies ...")
+    netrc_file = constants.USER_PATH / ".netrc"
+    add_login = True
+    if netrc_file.exists():
+        with open(netrc_file, "r") as f:
+            if "urs.earthdata.nasa.gov" in f.read():
+                add_login = False
+
+    if add_login:
+        with open(constants.USER_PATH / ".netrc", "a+") as f:
+            f.write(
+                "\nmachine urs.earthdata.nasa.gov login {} password {}".format(
+                    constants.EARTHDATA_USER, constants.EARTHDATA_PASSWORD
+                )
+            )
+            os.fchmod(f.fileno(), 0o600)
+
+    constants.EARTH_DATA_COOKIE_FILE.touch()
+    subprocess.run(
+        [
+            "wget",
+            "--load-cookies",
+            constants.EARTH_DATA_COOKIE_FILE,
+            "--save-cookies",
+            constants.EARTH_DATA_COOKIE_FILE,
+            "--keep-session-cookies",
+            "https://urs.earthdata.nasa.gov",
+        ],
+        check=True,
+    )
+
+
 def _query_granule_metadata(bounds, product):
     granule_metadatas = [
         query(product=product, spatial=bound) for bound in bounds
@@ -38,6 +71,7 @@ def _query_granule_metadata(bounds, product):
 
 
 def _download_url(product, input):
+
     name, url = input
     outfile_path = constants.gedi_product_path(product) / name
     if os.path.exists(outfile_path):
@@ -133,6 +167,9 @@ def exec_spark(
     product: constants.GediProduct,
     download_only: bool,
 ):
+    if not os.path.exists(constants.EARTH_DATA_COOKIE_FILE):
+        _fetch_cookies()
+
     granule_metadata = _query_granule_metadata(bounds, product).drop_duplicates(
         subset="granule_name"
     )
