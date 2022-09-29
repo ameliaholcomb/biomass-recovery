@@ -1,12 +1,11 @@
+import pathlib
 from pyspark.sql import SparkSession
 
 
-from datetime import datetime, date
+import argparse
 import pandas as pd
-from pyspark.sql import Row
 
 from geopandas import gpd
-import datetime as dt
 import subprocess
 from shapely.geometry import box
 from shapely.geometry.polygon import orient
@@ -20,7 +19,6 @@ from src.data import gedi_database_loader
 from src import constants
 from functools import partial
 from typing import List
-
 
 
 def _get_engine():
@@ -153,8 +151,13 @@ def exec_spark(
 
     print("Total granules found: ", len(granule_metadata.index) - 1)
     print("Total file size (MB): ", granule_metadata["granule_size"].sum())
-    print("Required granules found: ", len(required_granules.index) - 1)
-    print("Required file size (MB): ", required_granules["granule_size"].sum())
+    print("Granules to download: ", len(required_granules.index) - 1)
+    print(
+        "File size to download (MB): ",
+        required_granules["granule_size"].sum(),
+    )
+
+    input("To proceed to download and ingest this data, press ENTER >>> ")
 
     # Spark starts here
     spark = SparkSession.builder.getOrCreate()
@@ -220,21 +223,41 @@ def exec_spark(
 # );
 
 if __name__ == "__main__":
-    # AMAZON SHAPEFILE
-    # shapefile = USER_PATH / 'shapefiles' / 'Amazon_rainforest_shapefile.zip'
-    # shp = gpd.read_file(shapefile)
+    parser = argparse.ArgumentParser(
+        description="Download and ingest GEDI data"
+    )
+    parser.add_argument(
+        "--shapefile",
+        help="Shapefile (zip) containing the world region to download.",
+    )
+    parser.add_argument(
+        "--download_only",
+        help=(
+            "Only download the raw granule files to shared location."
+            "Do not also ingest the data into PostGIS database."
+        ),
+    )
+    args = parser.parse_args()
+
+    shapefile = pathlib.Path(args.shapefile)
+    if not shapefile.exists():
+        print("Unable to locate file {}".format(shapefile))
+        exit(1)
+    shp = gpd.read_file(shapefile)
 
     # # The CMR API cannot accept a shapefile with more than 5000 points,
     # # so we simplify our query to just the bounding box around the region.
-    # bbox = gpd.GeoSeries(box(*shp.geometry.values[0].bounds))
+    bbox = gpd.GeoSeries(box(*shp.geometry.values[0].bounds))
     # print(shp.geometry.values[0].bounds)
     # bbox1 = gpd.GeoSeries(box(-60, 0, -59.75, 0.10))
     # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
     # exec_spark([bbox1, bbox2], constants.GediProduct.L4A, download_only=False)
 
-    bbox = gpd.read_file(
-        constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
-    )
-    boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
+    # bbox = gpd.read_file(
+    #     constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
+    # )
+    # boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
 
-    exec_spark(boxes, constants.GediProduct.L4A, download_only=False)
+    exec_spark(
+        [bbox], constants.GediProduct.L4A, download_only=args.download_only
+    )

@@ -1,5 +1,6 @@
 affine==2.3.1
 anyio==3.5.0
+apache-sedona==1.2.0
 argon2-cffi==21.3.0
 argon2-cffi-bindings==21.2.0
 asttokens==2.0.5
@@ -59,6 +60,7 @@ google-resumable-media==2.2.1
 googleapis-common-protos==1.54.0
 googledrivedownloader==0.4
 greenlet==1.1.2
+h5py==3.7.0
 HeapDict==1.0.1
 here-map-widget-for-jupyter==1.1.3
 holoviews==1.15.0
@@ -146,6 +148,7 @@ pycparser==2.21
 PyCRS==1.0.2
 pyct==0.4.8
 Pygments==2.11.2
+pylr2==0.1.0
 pyparsing==3.0.7
 pyproj==3.3.1
 pyrsistent==0.18.1
@@ -177,7 +180,7 @@ snuggs==1.4.7
 sortedcontainers==2.4.0
 soupsieve==2.3.1
 SQLAlchemy==1.4.39
--e git+ssh://git@github.com/ameliaholcomb/biomass-recovery.git@b9612dd480e37e718131b36303448174f52ace06#egg=src
+-e git+ssh://git@github.com/ameliaholcomb/biomass-recovery.git@e543b2dacc9bdfb26cc23431deaa4d09eca8e263#egg=src
 stack-data==0.1.4
 statsmodels==0.13.2
 tabulate==0.8.9
@@ -197,6 +200,7 @@ typing-inspect==0.7.1
 typing_extensions==4.0.1
 uritemplate==3.0.1
 urllib3==1.26.10
+utm==0.7.0
 voila==0.3.1
 wcwidth==0.2.5
 webencodings==0.5.1
