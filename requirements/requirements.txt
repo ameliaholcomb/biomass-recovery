@@ -45,6 +45,7 @@ fsspec==2022.7.1
 future==0.18.2
 geeadd==0.5.5
 geemap==0.11.3
+GeoAlchemy2==0.12.5
 geocoder==1.38.1
 geojson==2.5.0
 geopandas==0.11.0
@@ -180,7 +181,7 @@ snuggs==1.4.7
 sortedcontainers==2.4.0
 soupsieve==2.3.1
 SQLAlchemy==1.4.39
--e git+ssh://git@github.com/ameliaholcomb/biomass-recovery.git@e543b2dacc9bdfb26cc23431deaa4d09eca8e263#egg=src
+-e git+ssh://git@github.com/ameliaholcomb/biomass-recovery.git@3b42b66f89ed7dff4cfe7efc27f395df94b95cf1#egg=src
 stack-data==0.1.4
 statsmodels==0.13.2
 tabulate==0.8.9

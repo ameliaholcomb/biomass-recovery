@@ -20,7 +20,7 @@ from src.data.gedi_cmr_query import query
 from src.data import gedi_database_loader
 from src import constants
 from functools import partial
-from typing import List
+from typing import List, Optional
 
 
 def _get_engine():
@@ -166,6 +166,7 @@ def exec_spark(
     bounds: List[gpd.GeoSeries],
     product: constants.GediProduct,
     download_only: bool,
+    dry_run: bool,
 ):
     if not os.path.exists(constants.EARTH_DATA_COOKIE_FILE):
         _fetch_cookies()
@@ -175,6 +176,21 @@ def exec_spark(
     )
     print("Total granules found: ", len(granule_metadata.index) - 1)
     print("Total file size (MB): ", granule_metadata["granule_size"].sum())
+
+    if dry_run:
+        with tempfile.NamedTemporaryFile(
+            dir="/tmp", mode="w+t", delete=False
+        ) as temp:
+            print(
+                "Dry run: saving the names of all found granules to {}.\n".format(
+                    temp.name
+                )
+            )
+            for name in list(granule_metadata["granule_name"]):
+                temp.write(name + "\n")
+            temp.flush()
+        if download_only:
+            return
 
     if download_only:
         required_granules = granule_metadata
@@ -187,7 +203,7 @@ def exec_spark(
         ]
 
     if required_granules.empty:
-        print("No granules required")
+        print("All granules for this region already present in the database")
         return
 
     print("Granules to download: ", len(required_granules.index) - 1)
@@ -196,6 +212,8 @@ def exec_spark(
         required_granules["granule_size"].sum(),
     )
 
+    if dry_run:
+        return
     if download_only:
         input("To proceed to download this data, press ENTER >>> ")
     else:
@@ -274,6 +292,11 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
+        "--dry_run",
+        help=("Dry run only: save all found granules to temporary file."),
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "--download_only",
         help=(
             "Only download the raw granule files to shared location."
@@ -293,10 +316,13 @@ if __name__ == "__main__":
     # # The CMR API cannot accept a shapefile with more than 5000 points,
     # # so we simplify our query to just the bounding box around the region.
     bbox = gpd.GeoSeries(box(*shp.geometry.values[0].bounds))
+
     # print(shp.geometry.values[0].bounds)
-    # bbox1 = gpd.GeoSeries(box(-60, 0, -59.75, 0.10))
+    # bbox1 = gpd.GeoSeries(box(-60, 0, -59.995, 0.005))
     # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
-    # exec_spark([bbox1, bbox2], constants.GediProduct.L4A, download_only=False)
+    # exec_spark(
+    #     [bbox1], constants.GediProduct.L4A, download_only=args.download_only
+    # )
 
     # bbox = gpd.read_file(
     #     constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
@@ -304,5 +330,8 @@ if __name__ == "__main__":
     # boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
 
     exec_spark(
-        [bbox], constants.GediProduct.L4A, download_only=args.download_only
+        [bbox],
+        constants.GediProduct.L4A,
+        download_only=args.download_only,
+        dry_run=args.dry_run,
     )
