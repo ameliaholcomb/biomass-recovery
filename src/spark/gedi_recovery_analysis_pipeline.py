@@ -47,7 +47,13 @@ def get_chunks(
 ) -> List[Tuple[gpd.GeoDataFrame, int, str]]:
     """Split the region and coverage years into chunks for Spark workers.
 
-    Divides the region along a 1 deg x 1 deg grid that aligns with the JRC data files.
+    Divides the region along a 1 deg x 1 deg grid that aligns with both
+    1) the JRC data files (10 deg x 10 deg)
+    2) the UTM coord system (6 deg longitude slices)
+    For this reason, modifications to the chunking strategy must take into
+    account that *only* chunks with width that divides both 10 and 6 are suitable.
+    In addition, care must be taken to ensure that the grid corners align.
+
     Each year will be processed separately.
 
     Returns:
@@ -176,7 +182,7 @@ if __name__ == "__main__":
         ),
         action=argparse.BooleanOptionalAction,
     )
-    parser.set_defaults(include_nonforest=False)
+    parser.set_defaults(keep_distribution=False)
     parser.add_argument(
         "--overwrite",
         help="Whether or not to overwrite existing saved files. Turned off by default",
