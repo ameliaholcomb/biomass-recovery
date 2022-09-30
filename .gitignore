@@ -104,3 +104,4 @@ notebooks/*.zip
 notebooks/*.txt
 notebooks/*.feather
 notebooks/*.laz
+requirements/environment.yml
