@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import geopandas as gpd
 import logging
 import math
@@ -20,7 +21,6 @@ from src.utils.logging import get_logger
 logger = get_logger(__file__)
 logger.setLevel(logging.DEBUG)
 
-FILE_PATTERN = "{token}_{year}_{data_type}.{ext}"
 
 # Mean GEDI shot geolocation error in meters
 # See Dubayah et al. 2021
@@ -47,23 +47,6 @@ MEAN_GEOLOCATION_ERROR_M = 10.2
 # Y = N(y_observed, sigma)
 # where sigma = sqrt(w)
 LOCATION_DIST_SD = MEAN_GEOLOCATION_ERROR_M * math.sqrt(2 / math.pi)
-
-
-def construct_filename(token: str, year: int, data_type: str):
-    if data_type == "shotinfo":
-        return FILE_PATTERN.format(
-            token=token, year=year, data_type=data_type, ext="parquet"
-        )
-    if data_type == "recovery":
-        return FILE_PATTERN.format(
-            token=token, year=year, data_type=data_type, ext="csv"
-        )
-    if data_type == "agbd":
-        return FILE_PATTERN.format(
-            token=token, year=year, data_type=data_type, ext="csv"
-        )
-    else:
-        raise ValueError("Unknown data type: {}".format(data_type))
 
 
 # Note: Safe in the UTM coordinate system, where step size
@@ -202,7 +185,7 @@ def compute_monte_carlo_recovery(
     geometry: gpd.GeoDataFrame,
     year: int,
     token: str,
-    save_dir: str,
+    finterface,
     num_iterations: int = 1000,
     include_degraded: bool = False,
     include_nonforest: bool = False,
@@ -257,8 +240,9 @@ def compute_monte_carlo_recovery(
         }
     )
     # Note: this reprojection does not 'smear' pixel values
-    # However, it may add fill pixels -- be sure to skip _FillValue
-    recovery_period_utm = recovery_period.rio.reproject(utm_crs)
+    # However, it may add fill pixels. These will be set to np.nan --
+    # worth noting that this is the same fill value as non-recovering pixels
+    recovery_period_utm = recovery_period.rio.reproject(utm_crs, nodata=np.nan)
 
     ## 4. Generate random sample of shot locations and AGBD values
     sample_shape = (len(gedi_shots), num_iterations)
@@ -278,6 +262,7 @@ def compute_monte_carlo_recovery(
         np.expand_dims(gedi_shots.agbd_se, axis=1),
         size=sample_shape,
     )
+    agbd_sample = agbd_sample.clip(0, None)
 
     ## 5. Using sampled shot locations, get sample of recovery values
     recovery_sample = overlay_utm_sample_and_recovery_raster(
@@ -294,24 +279,26 @@ def compute_monte_carlo_recovery(
     # Close rasters and return results
     recovery_period_utm.close()
     recovery_period.close()
+    recovery_cols = ["r_{}".format(i) for i in range(num_iterations)]
+    recovery_sample_df = pd.DataFrame(recovery_sample, columns=recovery_cols)
+    agbd_cols = ["a_{}".format(i) for i in range(num_iterations)]
+    agbd_sample_df = pd.DataFrame(agbd_sample, columns=agbd_cols)
+    gedi_shots = gedi_shots.reset_index(drop=True)
+    master_df = pd.concat(
+        [gedi_shots, recovery_sample_df, agbd_sample_df], axis=1
+    )
 
-    save_path = pathlib.Path(save_dir)
-    gedi_shots.to_parquet(
-        save_path
-        / "shotinfo"
-        / construct_filename(token=token, year=year, data_type="shotinfo"),
+    finterface.save_data(
+        token=token, year=year, data_type="shotinfo", data=gedi_shots
     )
-    np.savetxt(
-        save_path
-        / "recovery"
-        / construct_filename(token=token, year=year, data_type="recovery"),
-        recovery_sample,
+    finterface.save_data(
+        token=token, year=year, data_type="recovery", data=recovery_sample
     )
-    np.savetxt(
-        save_path
-        / "agbd"
-        / construct_filename(token=token, year=year, data_type="agbd"),
-        agbd_sample,
+    finterface.save_data(
+        token=token, year=year, data_type="agbd", data=agbd_sample
+    )
+    finterface.save_data(
+        token=token, year=year, data_type="master", data=master_df
     )
 
     return pd.DataFrame(
