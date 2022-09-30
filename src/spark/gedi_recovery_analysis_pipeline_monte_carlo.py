@@ -7,18 +7,19 @@ import numpy as np
 import os
 import pandas as pd
 
-pd.options.mode.chained_assignment = None  # default='warn'
 import pathlib
 from pyspark.sql import DataFrame, SparkSession
 from shapely.geometry import Polygon
 from sklearn.model_selection import KFold
-import statsmodels.formula.api as smf
 from typing import List, Tuple
 
 from src import constants
 from src.data.jrc_loading import _to_nesw
-from src.processing.gedi_recovery_analysis_monte_carlo import (
-    compute_monte_carlo_recovery,
+from src.processing.gedi_recovery_match_monte_carlo import match_monte_carlo
+from src.processing.recovery_analysis_models import (
+    filter_shots,
+    run_median_regression_model,
+    run_ols_medians_model,
 )
 from src.utils.logging import get_logger
 
@@ -147,7 +148,6 @@ def get_chunks(
     if print_work_plan:
         print("Printing work plan ...")
         print("I will work on {} chunks".format(len(chunks)))
-        # [print(" {} ".format(chunk[2])) for chunk in chunks]
         print_plan(geometry, chunks)
         print("Work plan saved to {}".format(planloc))
         input("To continue with this work plan, press ENTER >>> ")
@@ -155,11 +155,12 @@ def get_chunks(
     return chunks
 
 
-def compute_recovery(
+def match_monte_carlo_wrapper(
     opts, finterface: FileInterface, chunk: Tuple[gpd.GeoDataFrame, int, str]
 ):
+    """Wrapper for match_monte_carlo that catches errors and collects metadata."""
     try:
-        return compute_monte_carlo_recovery(
+        return match_monte_carlo(
             geometry=chunk[0].geometry,
             year=chunk[1],
             token=chunk[2],
@@ -187,109 +188,17 @@ def compute_recovery(
         raise e
 
 
-def exec_spark(
+def generate_data_spark(
     spark, chunks: List[Tuple[gpd.GeoDataFrame, int, str]], opts
 ) -> pd.DataFrame:
     finterface = FileInterface(opts.save_dir)
     rdd = spark.sparkContext.parallelize(chunks, 32)
-    rdd_processed = rdd.map(partial(compute_recovery, opts, finterface))
+    rdd_processed = rdd.map(
+        partial(match_monte_carlo_wrapper, opts, finterface)
+    )
     chunk_rdd = rdd_processed.collect()
     chunk_index = pd.concat(chunk_rdd, ignore_index=True)
     return chunk_index
-
-
-def _filter_pct_agreement(pct_agreement, recovery_sample):
-    # Filter for points with at least x% agreement on recovery age.
-    nbins = np.arange(
-        0, np.max(recovery_sample[~np.isnan(recovery_sample)]) + 2
-    )
-    hist = (
-        np.apply_along_axis(
-            lambda a: np.histogram(a, bins=nbins)[0],
-            axis=1,
-            arr=recovery_sample,
-        )
-        / recovery_sample.shape[1]
-    )
-    return np.max(hist, axis=1) >= (pct_agreement / 100)
-
-
-def _filter_pct_nonnan(pct_agreement, recovery_sample):
-    # Filter for points with at least x% non-nan values (x% recovering forest)
-    return (
-        np.sum(~np.isnan(recovery_sample), axis=1) / recovery_sample.shape[1]
-    ) >= pct_agreement / 100
-
-
-def _mode(arr, axis):
-    if arr.shape[0] > 0:
-        nbins = np.arange(0, np.max(arr[~np.isnan(arr)]) + 2)
-        hist = np.apply_along_axis(
-            lambda a: np.histogram(a, bins=nbins)[0],
-            axis=axis,
-            arr=arr,
-        )
-        mode_count = np.max(hist, axis=axis)
-        mode_val = np.argmax(hist, axis=axis)
-        nan_count = np.sum(np.isnan(arr), axis=axis)
-
-        mode_is_nan = np.where(nan_count > mode_count)
-
-        mode_count[mode_is_nan] = nan_count[mode_is_nan]
-        mode_val = np.argmax(hist, axis=axis)
-        mode_val[mode_is_nan] = -1
-        return mode_count, mode_val
-    return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
-
-
-def _filter_shots(opts, finterface: FileInterface, chunk_id: Tuple[int, str]):
-
-    year, token = chunk_id
-    recovery_sample = finterface.load_data(
-        token=token, year=year, data_type="recovery"
-    )
-
-    filter_idx = _filter_pct_nonnan(opts.pct_agreement, recovery_sample)
-    filtered_recovery = recovery_sample[filter_idx]
-    filter_idx2 = np.std(filtered_recovery, axis=1) <= 1
-    filtered_recovery = filtered_recovery[filter_idx2]
-
-    hist_summary = pd.DataFrame(
-        {
-            "min": np.min(filtered_recovery, axis=1),
-            "max": np.max(filtered_recovery, axis=1),
-            "p75": np.quantile(filtered_recovery, q=0.75, axis=1),
-            "median": np.quantile(filtered_recovery, q=0.50, axis=1),
-            "p25": np.quantile(filtered_recovery, q=0.25, axis=1),
-            "mean": np.mean(filtered_recovery, axis=1),
-            "std": np.std(filtered_recovery, axis=1),
-            "var": np.var(filtered_recovery, axis=1),
-        }
-    )
-    counts, values = _mode(filtered_recovery, axis=1)
-    hist_summary["mode_counts"] = counts
-    hist_summary["mode_vals"] = values
-
-    # Free up some memory before loading master df
-    del filtered_recovery
-    del recovery_sample
-    master_df = finterface.load_data(token=token, year=year, data_type="master")
-    filtered = master_df[filter_idx]
-    filtered = filtered[filter_idx2]
-    # Note: Cannot assign df["shot_number"] = filtered["shot_number"]
-    # This implicitly converts to float64 (for unknown reasons)
-    # which is not big enough to hold the shot numbers, and silently makes them NaN.
-    hist_summary["shot_number"] = filtered.shot_number.values
-    finterface.save_data(
-        token=token, year=year, data_type="filtered", data=filtered
-    )
-    finterface.save_data(
-        token=token,
-        year=year,
-        data_type="hist",
-        data=hist_summary,
-    )
-    return filtered
 
 
 def _batch_produce_experiments(start, end, df):
@@ -311,67 +220,6 @@ def _combine_dfs(experiment_data):
     return experiment_id, pd.concat(dataframes)
 
 
-def _run_median_regression_model(experiment_id, dataframe):
-    recovery_col = "r_{}".format(experiment_id)
-    model = smf.quantreg(
-        "agcd_{experiment_id} ~ r_{experiment_id}".format(
-            experiment_id=experiment_id
-        ),
-        dataframe,
-    )
-    res = model.fit(q=0.5)
-    result = [
-        [
-            res.params["Intercept"],
-            *res.conf_int().loc["Intercept"],
-            res.params[recovery_col],
-            *res.conf_int().loc[recovery_col],
-            res.prsquared,
-        ]
-    ]
-    result_df = pd.DataFrame(
-        result, columns=["a", "la", "ua", "b", "lb", "ub", "prs"]
-    )
-    return result_df
-
-
-def _run_ols_medians_model(experiment_id, dataframe):
-    recovery_col = "r_{}".format(experiment_id)
-    agcd_col = "agcd_{}".format(experiment_id)
-    recovery_periods = dataframe[recovery_col].unique()
-    median_agcds = np.array(
-        [
-            dataframe.loc[dataframe[recovery_col] == x, agcd_col].median()
-            for x in recovery_periods
-        ]
-    )
-    df = pd.DataFrame(
-        {
-            "recovery": recovery_periods,
-            "agcd": median_agcds,
-        }
-    )
-    df.to_feather("/maps/forecol/data/Overlays/monte_carlo/medians.feather")
-    ols = smf.ols("agcd ~ recovery", df).fit()
-    ols_ci = ols.conf_int().loc["recovery"].tolist()
-    ols_intercept_ci = ols.conf_int().loc["Intercept"].tolist()
-    result = [
-        [
-            ols.params["Intercept"],
-            ols_intercept_ci[0],
-            ols_intercept_ci[1],
-            ols.params["recovery"],
-            ols_ci[0],
-            ols_ci[1],
-            ols.rsquared,
-        ]
-    ]
-    result_df = pd.DataFrame(
-        result, columns=["a", "la", "ua", "b", "lb", "ub", "rs"]
-    )
-    return result_df
-
-
 def _run_experiment(experiment_data):
     experiment_id, dataframe = experiment_data
     # Require that the values are non-nan and that the recovery age is 3-22
@@ -385,7 +233,7 @@ def _run_experiment(experiment_data):
     dataframe["agcd_{}".format(experiment_id)] = (
         dataframe["a_{}".format(experiment_id)] * 0.47
     )
-    return _run_ols_medians_model(experiment_id, dataframe)
+    return run_ols_medians_model(experiment_id, dataframe)
 
 
 def run_model_spark(spark, chunk_metadata, opts):
@@ -395,7 +243,7 @@ def run_model_spark(spark, chunk_metadata, opts):
     chunk_ids = [(x.year, x.token) for _, x in processed_chunks.iterrows()]
 
     rdd = spark.sparkContext.parallelize(chunk_ids, 32)
-    filtered_shots = rdd.map(partial(_filter_shots, opts, finterface))
+    filtered_shots = rdd.map(partial(filter_shots, opts, finterface))
     print("n = {}".format(filtered_shots.map(len).sum()))
 
     # batch size should divide num_iterations evenly
@@ -408,6 +256,27 @@ def run_model_spark(spark, chunk_metadata, opts):
         experiments = exploded.groupByKey().map(_combine_dfs)
         results.extend(experiments.map(_run_experiment).collect())
     return pd.concat(results, ignore_index=True)
+
+
+def exec_spark(args):
+    print("Initializing Spark ...")
+    spark = (
+        SparkSession.builder.config("spark.executor.memory", "10g")
+        .config("spark.driver.memory", "32g")
+        .getOrCreate()
+    )
+
+    # Stage 1: Generate monte carlo sample data or restore from checkpoint
+    metadata_file = pathlib.Path(args.save_dir) / "chunk_metadata.feather"
+    if metadata_file.exists() and not args.overwrite:
+        chunk_metadata = pd.read_feather(metadata_file)
+    else:
+        chunks = get_chunks(args.shapefile, args.years, args.print_work_plan)
+        chunk_metadata = generate_data_spark(spark, chunks, args)
+        chunk_metadata.to_feather(metadata_file)
+
+    # Stage 2: Run model
+    return run_model_spark(spark, chunk_metadata, args)
 
 
 if __name__ == "__main__":
@@ -480,37 +349,17 @@ if __name__ == "__main__":
     parser.set_defaults(print_work_plan=True)
     args = parser.parse_args()
 
-    save_dir = pathlib.Path(args.save_dir)
-    assert save_dir.exists()
-    shapefile = pathlib.Path(args.shapefile)
-    assert shapefile.exists()
-    years = args.years
-    pct_agreement = args.pct_agreement
-    if not pct_agreement <= 100 and pct_agreement >= 0:
+    assert pathlib.Path(args.save_dir).exists()
+    assert pathlib.Path(args.shapefile).exists()
+    if not args.pct_agreement <= 100 and args.pct_agreement >= 0:
         logger.error(
             "Invalid value for pct_agreement, must be an integer from 0 to 100."
         )
         exit(1)
-    print_work_plan = args.print_work_plan
-
-    print("Initializing Spark ...")
-    spark = (
-        SparkSession.builder.config("spark.executor.memory", "10g")
-        .config("spark.driver.memory", "32g")
-        .getOrCreate()
-    )
-
-    metadata_file = pathlib.Path(args.save_dir) / "chunk_metadata.feather"
-    if metadata_file.exists() and not args.overwrite:
-        chunk_metadata = pd.read_feather(metadata_file)
-    else:
-        chunks = get_chunks(shapefile, years, print_work_plan)
-        chunk_metadata = exec_spark(spark, chunks, args)
-        chunk_metadata.to_feather(metadata_file)
 
     results_file = pathlib.Path(
         args.save_dir
-    ) / "model_results_p{}.feather".format(pct_agreement)
+    ) / "model_results_p{}.feather".format(args.pct_agreement)
     if results_file.exists() and not args.overwrite:
         logger.error(
             "Results file {} already exists and --overwrite=False, exiting".format(
@@ -518,5 +367,6 @@ if __name__ == "__main__":
             )
         )
         exit(1)
-    results = run_model_spark(spark, chunk_metadata, args)
+
+    results = exec_spark(args)
     results.to_feather(results_file)

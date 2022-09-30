@@ -181,7 +181,7 @@ def get_gedi_shots(
     return gedi_shots
 
 
-def compute_monte_carlo_recovery(
+def match_monte_carlo(
     geometry: gpd.GeoDataFrame,
     year: int,
     token: str,
