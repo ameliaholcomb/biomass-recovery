@@ -3,19 +3,15 @@ import geopandas as gpd
 import logging
 import math
 import numpy as np
-import os
 import pandas as pd
-import pathlib
 import pyproj
 import utm
 
 from src import constants
-from src.processing.gedi_recovery_analysis import (
-    overlay_gedi_shots_and_recovery_raster,
-)
 from src.processing.jrc_processing import compute_recovery_period
 from src.data.jrc_loading import load_jrc_data
 from src.data.gedi_database import GediDatabase
+import src.utils.hexagons as hex
 from src.utils.logging import get_logger
 
 logger = get_logger(__file__)
@@ -47,7 +43,6 @@ MEAN_GEOLOCATION_ERROR_M = 10.2
 # Y = N(y_observed, sigma)
 # where sigma = sqrt(w)
 LOCATION_DIST_SD = MEAN_GEOLOCATION_ERROR_M * math.sqrt(2 / math.pi)
-
 
 # Note: Safe in the UTM coordinate system, where step size
 # differs by less than 0.00000001 across the raster
@@ -145,7 +140,6 @@ def get_gedi_shots(
     database = GediDatabase()
 
     # Load GEDI data within tile
-    logger.info("Loading Level 4a GEDI shots for %s in this geometry", year)
     gedi_shots = database.query(
         table_name="level_4a",
         columns=[
@@ -168,16 +162,15 @@ def get_gedi_shots(
         start_time=f"{year}-01-01",
         end_time=f"{year+1}-01-01",
     )
-    logger.debug(
-        "Found %s shots in %s in the specified geometry", len(gedi_shots), year
-    )
-
     # Preliminary filtering to reduce computation size
     gedi_shots = gedi_shots[
         (gedi_shots.l2_quality_flag == 1)
         & (gedi_shots.l4_quality_flag == 1)
         & (gedi_shots.degrade_flag == 0)
     ]
+    logger.debug(
+        "Found %s shots in %s in the specified geometry", len(gedi_shots), year
+    )
     return gedi_shots
 
 
@@ -186,11 +179,13 @@ def match_monte_carlo(
     year: int,
     token: str,
     finterface,
-    num_iterations: int = 1000,
+    random_offsets: np.array,
+    diameter: int,
+    num_iterations: int = 100,
     include_degraded: bool = False,
     include_nonforest: bool = False,
 ):
-    ## 1. Load GEDI shots and recovery periods
+    ## 1. Load GEDI shots, recovery periods, and equal-area projection
     gedi_shots = get_gedi_shots(geometry, year, constants.WGS84)
     if len(gedi_shots) == 0:
         logger.warning(f"Found 0 shots in the specified geometry in {year}.")
@@ -264,10 +259,61 @@ def match_monte_carlo(
     )
     agbd_sample = agbd_sample.clip(0, None)
 
-    ## 5. Using sampled shot locations, get sample of recovery values
+    ## 5. Using sampled shot locations, get sample of recovery values and hex grid cell ids
     recovery_sample = overlay_utm_sample_and_recovery_raster(
         easting_sample, northing_sample, recovery_period_utm
     )
+
+    # Hex grid cells:
+    # To account for spatial autocorrelation, we need to run the model on a sample of GEDI shots
+    # that are all at least diameter distance apart.
+    # One efficient way to do this is with hexagon buffering:
+    # divide up the shape into equal-area hexagons of size diameter, and choose one shot at random
+    # from each hexagon. The basic idea is described well in
+    # https://gorelick.medium.com/more-buffered-samples-with-hex-cells-b9a9bd36120d
+    # We will follow three main steps.
+    # 1. Convert all coordinates into an equal-area projection CRS.
+    # 2. Map x,y coordinates to q,r hexagonal coordinates for a standard hexagonal grid with the given diameter.
+    #    This is an efficient way of grouping points into an enclosing hexagon, because
+    #    the coordinate conversion is a simple affine transform (matrix multiply) and does not require
+    #    intersecting our points with a bunch of hexagonal polygons.
+    # 3. Label each point with a unique integer hex_id according to the hexagon it lies in.
+    #    During the experiments,
+    #      pts.groupby('hex_id').agg(random.choice)
+    #    will efficiently extract one random point from each label group.
+
+    # There are a few subtleties.
+    # - We run the models n_iterations times, and we would like a different sample for each run.
+    #    But, we don't want to sample from the same hexagonal groupings each time:
+    #    we would like the hex grid to move with a random offset for each iteration.
+    #    Rather than moving the grid (hard), we instead offset all the GEDI
+    #    shot locations by that amount (easy).
+    # - Drawing one point from each hexagon in a grid would give us
+    #       mean distance = diameter
+    #       min distance = 0
+    #    Thereform we omit every other hexagon to acheive
+    #       mean distance = 2 * diameter
+    #       min distance = diameter
+
+    # Map the UTM coordinates onto an equal-area projection such as the Albers Conic.
+    # TODO: Currently using a projection only intended for South America
+    # TODO: Unfortunately, points_from_xy is a rather expensive operation.
+    sa_albers_crs = pyproj.CRS.from_string("ESRI:102033")
+    pts = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(
+            (easting_sample + random_offsets).flatten(),
+            (northing_sample + random_offsets).flatten(),
+            crs=utm_crs,
+        )
+    ).to_crs(sa_albers_crs)
+    # Convert x,y points in equal-area projection to their q,r hexagonal coordinate
+    qs, rs = hex.xy_to_axial(pts.geometry.x, pts.geometry.y, diameter=diameter)
+
+    # Label hexagons, dropping even rows and columns to ensure at least diameter distance between any two hexagons
+    hex_id_sample = hex.pair_to_label(qs, rs)
+    hex_id_sample[np.mod(qs, 2) == 0] = 0
+    hex_id_sample[np.mod(rs, 2) == 0] = 0
+    hex_id_sample = hex_id_sample.reshape(sample_shape)
 
     if not (recovery_sample.shape[0] == len(agbd_sample)):
         raise RuntimeError(
@@ -279,13 +325,17 @@ def match_monte_carlo(
     # Close rasters and return results
     recovery_period_utm.close()
     recovery_period.close()
+
     recovery_cols = ["r_{}".format(i) for i in range(num_iterations)]
     recovery_sample_df = pd.DataFrame(recovery_sample, columns=recovery_cols)
+    hex_id_cols = ["h_{}".format(i) for i in range(num_iterations)]
+    hex_id_sample_df = pd.DataFrame(hex_id_sample, columns=hex_id_cols)
     agbd_cols = ["a_{}".format(i) for i in range(num_iterations)]
     agbd_sample_df = pd.DataFrame(agbd_sample, columns=agbd_cols)
     gedi_shots = gedi_shots.reset_index(drop=True)
     master_df = pd.concat(
-        [gedi_shots, recovery_sample_df, agbd_sample_df], axis=1
+        [gedi_shots, recovery_sample_df, hex_id_sample_df, agbd_sample_df],
+        axis=1,
     )
 
     finterface.save_data(
@@ -293,6 +343,9 @@ def match_monte_carlo(
     )
     finterface.save_data(
         token=token, year=year, data_type="recovery", data=recovery_sample
+    )
+    finterface.save_data(
+        token=token, year=year, data_type="hex_id", data=hex_id_sample
     )
     finterface.save_data(
         token=token, year=year, data_type="agbd", data=agbd_sample

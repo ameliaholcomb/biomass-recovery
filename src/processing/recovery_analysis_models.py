@@ -58,8 +58,8 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
 
     filter_idx = _filter_pct_nonnan(opts.pct_agreement, recovery_sample)
     filtered_recovery = recovery_sample[filter_idx]
-    filter_idx2 = np.std(filtered_recovery, axis=1) <= 1
-    filtered_recovery = filtered_recovery[filter_idx2]
+    # filter_idx2 = np.std(filtered_recovery, axis=1) <= 1
+    # filtered_recovery = filtered_recovery[filter_idx2]
 
     hist_summary = pd.DataFrame(
         {
@@ -82,7 +82,8 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
     del recovery_sample
     master_df = finterface.load_data(token=token, year=year, data_type="master")
     filtered = master_df[filter_idx]
-    filtered = filtered[filter_idx2]
+    # filtered = filtered[filter_idx2]
+
     # Note: Cannot assign df["shot_number"] = filtered["shot_number"]
     # This implicitly converts to float64 (for unknown reasons)
     # which is not big enough to hold the shot numbers, and silently makes them NaN.
@@ -115,10 +116,11 @@ def run_median_regression_model(experiment_id, dataframe):
             res.params[recovery_col],
             *res.conf_int().loc[recovery_col],
             res.prsquared,
+            len(dataframe),
         ]
     ]
     result_df = pd.DataFrame(
-        result, columns=["a", "la", "ua", "b", "lb", "ub", "prs"]
+        result, columns=["a", "la", "ua", "b", "lb", "ub", "prs", "n_pts"]
     )
     return result_df
 

@@ -35,6 +35,7 @@ class FileInterface(object):
         "master": "parquet",
         "shotinfo": "parquet",
         "recovery": "npy",
+        "hex_id": "npy",
         "agbd": "npy",
         "hist": "parquet",
         "filtered": "parquet",
@@ -82,7 +83,7 @@ class FileInterface(object):
             return np.load(file_path)
 
 
-def print_plan(shape, chunks):
+def _print_plan(shape, chunks):
     world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
     base = world.plot(color="white", edgecolor="black", figsize=(20, 20))
     shape.plot(ax=base, color="white", edgecolor="green", alpha=1)
@@ -103,7 +104,7 @@ def _box_to_gdf(minx, miny, maxx, maxy):
     return gpd.GeoDataFrame(geometry=[geo], crs=constants.WGS84)
 
 
-def get_chunks(
+def _get_chunks(
     shapefile: pathlib.Path, years: List[int], print_work_plan: bool
 ) -> List[Tuple[gpd.GeoDataFrame, int, str]]:
     """Split the region and coverage years into chunks for Spark workers.
@@ -148,15 +149,18 @@ def get_chunks(
     if print_work_plan:
         print("Printing work plan ...")
         print("I will work on {} chunks".format(len(chunks)))
-        print_plan(geometry, chunks)
+        _print_plan(geometry, chunks)
         print("Work plan saved to {}".format(planloc))
         input("To continue with this work plan, press ENTER >>> ")
 
     return chunks
 
 
-def match_monte_carlo_wrapper(
-    opts, finterface: FileInterface, chunk: Tuple[gpd.GeoDataFrame, int, str]
+def _match_monte_carlo_wrapper(
+    opts,
+    random_offsets: np.array,
+    finterface: FileInterface,
+    chunk: Tuple[gpd.GeoDataFrame, int, str],
 ):
     """Wrapper for match_monte_carlo that catches errors and collects metadata."""
     try:
@@ -165,6 +169,8 @@ def match_monte_carlo_wrapper(
             year=chunk[1],
             token=chunk[2],
             num_iterations=opts.num_iterations,
+            random_offsets=random_offsets,
+            diameter=opts.spatial_autocorr_dist,
             finterface=finterface,
             include_degraded=opts.include_degraded,
             include_nonforest=opts.include_nonforest,
@@ -188,28 +194,13 @@ def match_monte_carlo_wrapper(
         raise e
 
 
-def generate_data_spark(
-    spark, chunks: List[Tuple[gpd.GeoDataFrame, int, str]], opts
-) -> pd.DataFrame:
-    finterface = FileInterface(opts.save_dir)
-    rdd = spark.sparkContext.parallelize(chunks, 32)
-    rdd_processed = rdd.map(
-        partial(match_monte_carlo_wrapper, opts, finterface)
-    )
-    chunk_rdd = rdd_processed.collect()
-    chunk_index = pd.concat(chunk_rdd, ignore_index=True)
-    return chunk_index
-
-
 def _batch_produce_experiments(start, end, df):
     experiment_data = []
-    for experiment_id in range(start, end):
+    for id in range(start, end):
         experiment_data.append(
             (
-                experiment_id,
-                df[
-                    ["r_{}".format(experiment_id), "a_{}".format(experiment_id)]
-                ],
+                id,
+                df[["r_{}".format(id), "a_{}".format(id), "h_{}".format(id)]],
             )
         )
     return experiment_data
@@ -229,29 +220,55 @@ def _run_experiment(experiment_data):
         & (dataframe[recovery_col] >= 3)
         & (dataframe[recovery_col] <= 22)
     ].copy()
+
+    # Select a spatially decorrelated sample of the data
+    rng = np.random.default_rng()
+    dataframe = dataframe.groupby("h_{}".format(experiment_id)).agg(rng.choice)
+
     # Martin et al. (2011) conversion for AGCD from AGBD
     dataframe["agcd_{}".format(experiment_id)] = (
         dataframe["a_{}".format(experiment_id)] * 0.47
     )
-    return run_ols_medians_model(experiment_id, dataframe)
+    return run_median_regression_model(experiment_id, dataframe)
 
 
-def run_model_spark(spark, chunk_metadata, opts):
-    finterface = FileInterface(opts.save_dir)
+def generate_data_spark(
+    spark,
+    chunks: List[Tuple[gpd.GeoDataFrame, int, str]],
+    finterface: FileInterface,
+    opts,
+) -> pd.DataFrame:
+    rng = np.random.default_rng()
+    random_offsets = rng.integers(
+        0, opts.spatial_autocorr_dist, opts.num_iterations
+    )
+    rdd = spark.sparkContext.parallelize(chunks, 32)
+    rdd_processed = rdd.map(
+        partial(_match_monte_carlo_wrapper, opts, random_offsets, finterface)
+    )
+    chunk_rdd = rdd_processed.collect()
+    chunk_index = pd.concat(chunk_rdd, ignore_index=True)
+    return chunk_index
 
+
+def run_model_spark(spark, chunk_metadata, finterface, opts):
+
+    # 0. Get processed chunks
     processed_chunks = chunk_metadata[chunk_metadata.has_data == True]
     chunk_ids = [(x.year, x.token) for _, x in processed_chunks.iterrows()]
 
+    # 1. Filter shots
     rdd = spark.sparkContext.parallelize(chunk_ids, 32)
     filtered_shots = rdd.map(partial(filter_shots, opts, finterface))
     print("n = {}".format(filtered_shots.map(len).sum()))
 
+    # 2. Run experiment models
     # batch size should divide num_iterations evenly
-    batch_size = 100
+    batch_size = 10
     results = []
     for batch in range(0, opts.num_iterations, batch_size):
         exploded = filtered_shots.flatMap(
-            partial(_batch_produce_experiments, batch, batch + 10)
+            partial(_batch_produce_experiments, batch, batch + batch_size)
         )
         experiments = exploded.groupByKey().map(_combine_dfs)
         results.extend(experiments.map(_run_experiment).collect())
@@ -266,17 +283,18 @@ def exec_spark(args):
         .getOrCreate()
     )
 
+    finterface = FileInterface(args.save_dir)
     # Stage 1: Generate monte carlo sample data or restore from checkpoint
     metadata_file = pathlib.Path(args.save_dir) / "chunk_metadata.feather"
     if metadata_file.exists() and not args.overwrite:
         chunk_metadata = pd.read_feather(metadata_file)
     else:
-        chunks = get_chunks(args.shapefile, args.years, args.print_work_plan)
-        chunk_metadata = generate_data_spark(spark, chunks, args)
+        chunks = _get_chunks(args.shapefile, args.years, args.print_work_plan)
+        chunk_metadata = generate_data_spark(spark, chunks, finterface, args)
         chunk_metadata.to_feather(metadata_file)
 
     # Stage 2: Run model
-    return run_model_spark(spark, chunk_metadata, args)
+    return run_model_spark(spark, chunk_metadata, finterface, args)
 
 
 if __name__ == "__main__":
@@ -307,13 +325,21 @@ if __name__ == "__main__":
             "for the GEDI shot to pass quality filtering. (0-100)"
         ),
         type=int,
-        default=90,
+        default=100,
+    )
+    parser.add_argument(
+        "--spatial_autocorr_dist",
+        help=(
+            "Distance at which to consider points spatially decorrelated (m)."
+        ),
+        type=int,
+        default=4000,
     )
     parser.add_argument(
         "--num_iterations",
         help=("Number of model iterations to run"),
         type=int,
-        default=1000,
+        default=100,
     )
     parser.add_argument(
         "--include_degraded",
