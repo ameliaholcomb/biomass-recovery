@@ -221,15 +221,20 @@ def _run_experiment(experiment_data):
         & (dataframe[recovery_col] <= 22)
     ].copy()
 
-    # Select a spatially decorrelated sample of the data
-    rng = np.random.default_rng()
-    dataframe = dataframe.groupby("h_{}".format(experiment_id)).agg(rng.choice)
-
     # Martin et al. (2011) conversion for AGCD from AGBD
     dataframe["agcd_{}".format(experiment_id)] = (
         dataframe["a_{}".format(experiment_id)] * 0.47
     )
-    return run_median_regression_model(experiment_id, dataframe)
+
+    rng = np.random.default_rng()
+    results_list = []
+    for _ in range(50):
+        # Repeatedly select a spatially decorrelated sample of the data
+        sample = dataframe.groupby("h_{}".format(experiment_id)).agg(rng.choice)
+        results_list.append(run_median_regression_model(experiment_id, sample))
+    results = pd.concat(results_list, ignore_index=True)
+    results["experiment_id"] = experiment_id
+    return results
 
 
 def generate_data_spark(
@@ -385,7 +390,9 @@ if __name__ == "__main__":
 
     results_file = pathlib.Path(
         args.save_dir
-    ) / "model_results_p{}.feather".format(args.pct_agreement)
+    ) / "model_results_p{}_dist{}.feather".format(
+        args.pct_agreement, args.spatial_autocorr_dist
+    )
     if results_file.exists() and not args.overwrite:
         logger.error(
             "Results file {} already exists and --overwrite=False, exiting".format(
