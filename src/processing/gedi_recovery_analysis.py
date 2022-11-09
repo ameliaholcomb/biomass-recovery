@@ -23,6 +23,12 @@ def argnearest(array, values):
     return argmins
 
 
+# TODO(amelia): We should be able to speed this up by computing the value directly
+# e.g.
+# step = (array[1] - array[0])
+# np.floor((values - array[0]) / step)
+# for the closest pixel, then something else to work out which direction to go ...
+# OR maybe we can't do this because the differences aren't all equal? Due to projection?
 @numba.njit
 def arg_toptwo_nearest_centers(array, values):
     half_pixel = (array[1] - array[0]) / 2
@@ -142,6 +148,11 @@ def jrc_recovery(
     )
 
     # Compute recovery period from JRC
+    # Note that we have to compute from the annual change data directly
+    # rather than using saved values in LastDeforestationYear
+    # because these saved values are all for the full period (1982-2021)
+    # but the GEDI shots may have been taken earlier
+    # TODO(amelia): Find a way to usefully cache these values.
     logger.info("Computing recovery period until year %s", year)
     recovery_period = compute_recovery_period(
         annual_change,

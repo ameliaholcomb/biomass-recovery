@@ -162,7 +162,7 @@ def _query_downloaded(table_name):
     )
 
 
-def exec_spark(
+def _get_required_granules(
     bounds: List[gpd.GeoSeries],
     product: constants.GediProduct,
     download_only: bool,
@@ -195,6 +195,9 @@ def exec_spark(
     if download_only:
         required_granules = granule_metadata
     else:
+        # If the files have already been downloaded to stable file
+        # storage but not yet ingested into the DB, they will not
+        # be among stored_granules.
         stored_granules = _query_downloaded(_granules_table(product))
         required_granules = granule_metadata.loc[
             ~granule_metadata["granule_name"].isin(
@@ -213,13 +216,24 @@ def exec_spark(
     )
 
     if dry_run:
-        return
+        return []
     if download_only:
         input("To proceed to download this data, press ENTER >>> ")
+        return required_granules
     else:
         input("To proceed to download AND INGEST this data, press ENTER >>> ")
+        return required_granules
 
-    # Spark starts here
+
+def exec_spark(
+    bounds: List[gpd.GeoSeries],
+    product: constants.GediProduct,
+    download_only: bool,
+    dry_run: bool,
+):
+    required_granules = _get_required_granules(
+        bounds, product, download_only, dry_run
+    )
     spark = SparkSession.builder.getOrCreate()
     name_url = required_granules[["granule_name", "granule_url"]].to_records(
         index=False
