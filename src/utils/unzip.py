@@ -7,10 +7,9 @@ from typing import Callable, Optional
 
 from tqdm.autonotebook import tqdm
 
-from src.utils.logging import get_logger
+from src.utils import util_logging
 
-logger = get_logger(__name__)
-logger.setLevel(logging.INFO)
+logger = util_logging.get_logger(__name__)
 
 
 def unzip(

@@ -4,6 +4,8 @@ import pandas as pd
 import statsmodels.formula.api as smf
 from typing import Tuple
 
+from src.utils import wild_bootstrap as wb
+
 
 def _filter_pct_agreement(pct_agreement, recovery_sample):
     # Filter for points with at least x% agreement on recovery age.
@@ -58,8 +60,8 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
 
     filter_idx = _filter_pct_nonnan(opts.pct_agreement, recovery_sample)
     filtered_recovery = recovery_sample[filter_idx]
-    filter_idx2 = np.std(filtered_recovery, axis=1) <= 1
-    filtered_recovery = filtered_recovery[filter_idx2]
+    # filter_idx2 = np.std(filtered_recovery, axis=1) <= 1
+    # filtered_recovery = filtered_recovery[filter_idx2]
 
     hist_summary = pd.DataFrame(
         {
@@ -82,7 +84,7 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
     del recovery_sample
     master_df = finterface.load_data(token=token, year=year, data_type="master")
     filtered = master_df[filter_idx]
-    filtered = filtered[filter_idx2]
+    # filtered = filtered[filter_idx2]
     # Note: Cannot assign df["shot_number"] = filtered["shot_number"]
     # This implicitly converts to float64 (for unknown reasons)
     # which is not big enough to hold the shot numbers, and silently makes them NaN.
@@ -100,26 +102,13 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
 
 
 def run_median_regression_model(experiment_id, dataframe):
-    recovery_col = "r_{}".format(experiment_id)
-    model = smf.quantreg(
-        "agcd_{experiment_id} ~ r_{experiment_id}".format(
-            experiment_id=experiment_id
-        ),
-        dataframe,
+    formula = "agcd_{experiment_id} ~ r_{experiment_id}".format(
+        experiment_id=experiment_id
     )
-    res = model.fit(q=0.5)
-    result = [
-        [
-            res.params["Intercept"],
-            *res.conf_int().loc["Intercept"],
-            res.params[recovery_col],
-            *res.conf_int().loc[recovery_col],
-            res.prsquared,
-        ]
-    ]
-    result_df = pd.DataFrame(
-        result, columns=["a", "la", "ua", "b", "lb", "ub", "prs"]
+    result = wb.wild_bootstrap(
+        data=dataframe, formula=formula, tau=0.5, num_samples=10
     )
+    result_df = pd.DataFrame(result, columns=["b0", "b1"])
     return result_df
 
 

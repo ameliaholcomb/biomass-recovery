@@ -9,11 +9,10 @@ import xarray as xr
 from tqdm.autonotebook import tqdm
 
 from src.constants import JRC_PATH
-from src.utils.logging import get_logger
+from src.utils.logging_util import get_logger
 from src.utils.os import list_content
 
 logger = get_logger(__file__)
-logger.setLevel(logging.INFO)
 
 JRC_DATASETS = (
     "AnnualChange",

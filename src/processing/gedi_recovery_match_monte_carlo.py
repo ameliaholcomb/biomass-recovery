@@ -10,17 +10,12 @@ import pyproj
 import utm
 
 from src import constants
-from src.processing.gedi_recovery_analysis import (
-    overlay_gedi_shots_and_recovery_raster,
-)
 from src.processing.jrc_processing import compute_recovery_period
 from src.data.jrc_loading import load_jrc_data
 from src.data.gedi_database import GediDatabase
-from src.utils.logging import get_logger
+from src.utils.logging_util import get_logger
 
 logger = get_logger(__file__)
-logger.setLevel(logging.DEBUG)
-
 
 # Mean GEDI shot geolocation error in meters
 # See Dubayah et al. 2021

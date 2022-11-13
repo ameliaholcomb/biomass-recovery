@@ -10,7 +10,6 @@ import pandas as pd
 import pathlib
 from pyspark.sql import DataFrame, SparkSession
 from shapely.geometry import Polygon
-from sklearn.model_selection import KFold
 from typing import List, Tuple
 
 from src import constants
@@ -21,15 +20,13 @@ from src.processing.recovery_analysis_models import (
     run_median_regression_model,
     run_ols_medians_model,
 )
-from src.utils.logging import get_logger
+from src.utils import logging_util
 
-logger = get_logger(__name__)
-logger.setLevel(logging.INFO)
-
+logger = logging_util.get_logger(__name__)
 planloc = "/tmp/gedi_analysis_workplan.png"
 
 
-class FileInterface(object):
+class FileInterface:
     # __init__ is *not* threadsafe, please only create a FileInterface from within the driver
     data_types = {
         "master": "parquet",
@@ -170,7 +167,7 @@ def match_monte_carlo_wrapper(
             include_nonforest=opts.include_nonforest,
         )
     except (KeyError, ValueError, RuntimeError) as e:
-        logger.warning(
+        logger.warn(
             "Encountered error in chunk {}, skipping: {}".format(chunk[2], e)
         )
         return pd.DataFrame(
@@ -229,11 +226,12 @@ def _run_experiment(experiment_data):
         & (dataframe[recovery_col] >= 3)
         & (dataframe[recovery_col] <= 22)
     ].copy()
+
     # Martin et al. (2011) conversion for AGCD from AGBD
     dataframe["agcd_{}".format(experiment_id)] = (
         dataframe["a_{}".format(experiment_id)] * 0.47
     )
-    return run_ols_medians_model(experiment_id, dataframe)
+    return run_median_regression_model(experiment_id, dataframe)
 
 
 def run_model_spark(spark, chunk_metadata, opts):
@@ -244,14 +242,13 @@ def run_model_spark(spark, chunk_metadata, opts):
 
     rdd = spark.sparkContext.parallelize(chunk_ids, 32)
     filtered_shots = rdd.map(partial(filter_shots, opts, finterface))
-    print("n = {}".format(filtered_shots.map(len).sum()))
+    logger.info("n = {}".format(filtered_shots.map(len).sum()))
 
-    # batch size should divide num_iterations evenly
-    batch_size = 100
+    batch_size = opts.batch_size
     results = []
     for batch in range(0, opts.num_iterations, batch_size):
         exploded = filtered_shots.flatMap(
-            partial(_batch_produce_experiments, batch, batch + 10)
+            partial(_batch_produce_experiments, batch, batch + batch_size)
         )
         experiments = exploded.groupByKey().map(_combine_dfs)
         results.extend(experiments.map(_run_experiment).collect())
@@ -259,7 +256,7 @@ def run_model_spark(spark, chunk_metadata, opts):
 
 
 def exec_spark(args):
-    print("Initializing Spark ...")
+    logger.info("Initializing Spark ...")
     spark = (
         SparkSession.builder.config("spark.executor.memory", "10g")
         .config("spark.driver.memory", "32g")
@@ -356,6 +353,19 @@ if __name__ == "__main__":
             "Invalid value for pct_agreement, must be an integer from 0 to 100."
         )
         exit(1)
+
+    batch_size = 10
+    if (
+        not (args.num_iterations // batch_size) * batch_size
+        == args.num_iterations
+    ):
+        logger.error(
+            "Invalid value for num_iterations, must evenly divide {}.".format(
+                batch_size
+            )
+        )
+        exit(1)
+    args.batch_size = batch_size
 
     results_file = pathlib.Path(
         args.save_dir

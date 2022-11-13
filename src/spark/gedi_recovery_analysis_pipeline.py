@@ -13,10 +13,9 @@ from typing import List, Tuple
 from src import constants
 from src.data.jrc_loading import _to_nesw
 from src.processing.gedi_recovery_analysis import compute_gedi_recovery_l4a
-from src.utils.logging import get_logger
+from src.utils import util_logging
 
-logger = get_logger(__name__)
-logger.setLevel(logging.INFO)
+logger = util_logging.get_logger(__name__)
 
 planloc = "/tmp/gedi_analysis_workplan.png"
 

@@ -9,10 +9,9 @@ from src.constants import WGS84
 from src.data.gedi_database import GediDatabase
 from src.data.jrc_loading import load_jrc_data
 from src.processing.jrc_processing import compute_recovery_period
-from src.utils.logging import get_logger
+from src.utils.logging_util import get_logger
 
 logger = get_logger(__file__)
-logger.setLevel(logging.DEBUG)
 
 
 @numba.njit

@@ -4,9 +4,9 @@ import pathlib
 
 import requests
 
-from src.utils.logging import get_logger
+from src.utils import util_logging
 
-logger = get_logger(__file__)
+logger = util_logging.get_logger(__name__)
 
 
 def download(
