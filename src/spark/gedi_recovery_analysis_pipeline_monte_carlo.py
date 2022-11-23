@@ -79,7 +79,7 @@ class FileInterface:
             return np.load(file_path)
 
 
-def print_plan(shape, chunks):
+def _print_plan(shape, chunks):
     world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
     base = world.plot(color="white", edgecolor="black", figsize=(20, 20))
     shape.plot(ax=base, color="white", edgecolor="green", alpha=1)
@@ -100,7 +100,7 @@ def _box_to_gdf(minx, miny, maxx, maxy):
     return gpd.GeoDataFrame(geometry=[geo], crs=constants.WGS84)
 
 
-def get_chunks(
+def _get_chunks(
     shapefile: pathlib.Path, years: List[int], print_work_plan: bool
 ) -> List[Tuple[gpd.GeoDataFrame, int, str]]:
     """Split the region and coverage years into chunks for Spark workers.
@@ -145,7 +145,7 @@ def get_chunks(
     if print_work_plan:
         print("Printing work plan ...")
         print("I will work on {} chunks".format(len(chunks)))
-        print_plan(geometry, chunks)
+        _print_plan(geometry, chunks)
         print("Work plan saved to {}".format(planloc))
         input("To continue with this work plan, press ENTER >>> ")
 
@@ -200,13 +200,11 @@ def generate_data_spark(
 
 def _batch_produce_experiments(start, end, df):
     experiment_data = []
-    for experiment_id in range(start, end):
+    for id in range(start, end):
         experiment_data.append(
             (
-                experiment_id,
-                df[
-                    ["r_{}".format(experiment_id), "a_{}".format(experiment_id)]
-                ],
+                id,
+                df[["r_{}".format(id), "a_{}".format(id)]],
             )
         )
     return experiment_data
@@ -244,21 +242,22 @@ def run_model_spark(spark, chunk_metadata, opts):
     filtered_shots = rdd.map(partial(filter_shots, opts, finterface))
     logger.info("n = {}".format(filtered_shots.map(len).sum()))
 
-    batch_size = opts.batch_size
     results = []
-    for batch in range(0, opts.num_iterations, batch_size):
-        exploded = filtered_shots.flatMap(
-            partial(_batch_produce_experiments, batch, batch + batch_size)
-        )
-        experiments = exploded.groupByKey().map(_combine_dfs)
-        results.extend(experiments.map(_run_experiment).collect())
+    # N.b. taking 10 models out of every 100 generated.
+    # We are filtering on the full 1000 generated data points
+    # but only running 100 models w/ten bootstrapped params each.
+    exploded = filtered_shots.flatMap(
+        partial(_batch_produce_experiments, 0, 100)
+    )
+    experiments = exploded.groupByKey().map(_combine_dfs)
+    results.extend(experiments.map(_run_experiment).collect())
     return pd.concat(results, ignore_index=True)
 
 
 def exec_spark(args):
     logger.info("Initializing Spark ...")
     spark = (
-        SparkSession.builder.config("spark.executor.memory", "10g")
+        SparkSession.builder.config("spark.executor.memory", "8g")
         .config("spark.driver.memory", "32g")
         .getOrCreate()
     )
@@ -268,7 +267,7 @@ def exec_spark(args):
     if metadata_file.exists() and not args.overwrite:
         chunk_metadata = pd.read_feather(metadata_file)
     else:
-        chunks = get_chunks(args.shapefile, args.years, args.print_work_plan)
+        chunks = _get_chunks(args.shapefile, args.years, args.print_work_plan)
         chunk_metadata = generate_data_spark(spark, chunks, args)
         chunk_metadata.to_feather(metadata_file)
 
@@ -298,13 +297,28 @@ if __name__ == "__main__":
         default=[2019, 2020, 2021],
     )
     parser.add_argument(
-        "--pct_agreement",
+        "--filter_pctagree",
         help=(
-            "Percent of sampled recovery periods for a GEDI shot that need to agree"
-            "for the GEDI shot to pass quality filtering. (0-100)"
+            "'percent agreement' filtering regime."
+            " Requires x percent of sampled ages to share the same value."
         ),
         type=int,
-        default=90,
+    )
+    parser.add_argument(
+        "--filter_pctnonan",
+        help=(
+            "'percent nonan' filtering regime."
+            " Requires x percent of sampled ages to have a non-nan value."
+        ),
+        type=int,
+    )
+    parser.add_argument(
+        "--filter_maxstd",
+        help=(
+            "'maximum standard deviation' filtering regime."
+            " Requires sampled ages to have a maximum standard deviation of x."
+        ),
+        type=int,
     )
     parser.add_argument(
         "--num_iterations",
@@ -348,28 +362,41 @@ if __name__ == "__main__":
 
     assert pathlib.Path(args.save_dir).exists()
     assert pathlib.Path(args.shapefile).exists()
-    if not args.pct_agreement <= 100 and args.pct_agreement >= 0:
-        logger.error(
-            "Invalid value for pct_agreement, must be an integer from 0 to 100."
-        )
-        exit(1)
 
-    batch_size = 10
-    if (
-        not (args.num_iterations // batch_size) * batch_size
-        == args.num_iterations
-    ):
-        logger.error(
-            "Invalid value for num_iterations, must evenly divide {}.".format(
-                batch_size
+    # Parse and correct filtering flags.
+    args.filter_regime = {}
+    if args.filter_pctagree is not None:
+        if args.filter_pctnonan is not None or args.filter_maxstd is not None:
+            logger.error("Filter pctagree must not use any other filters")
+            exit(1)
+        if not (args.filter_pctagree <= 100 and args.filter_pctagree >= 0):
+            logger.error(
+                "Invalid filter value, must be an integer from 0 to 100."
             )
-        )
-        exit(1)
-    args.batch_size = batch_size
+            exit(1)
+        args.filter_regime["pctagree"] = args.filter_pctagree
+    if args.filter_pctnonan is not None:
+        if not (args.filter_pctnonan <= 100 and args.filter_pctnonan >= 0):
+            logger.error(
+                "Invalid filter value, must be an integer from 0 to 100."
+            )
+            exit(1)
+        args.filter_regime["pctnonan"] = args.filter_pctnonan
+    if args.filter_maxstd is not None:
+        if args.filter_pctnonan is None:
+            logger.error(
+                "Filter maxstd must be set with pctnonan because reasons"
+            )
+            exit(1)
+        args.filter_regime["maxstd"] = args.filter_maxstd
 
     results_file = pathlib.Path(
         args.save_dir
-    ) / "model_results_p{}.feather".format(args.pct_agreement)
+    ) / "model_results_{}.feather".format(
+        "={}_".join([*args.filter_regime.keys(), ""]).format(
+            *args.filter_regime.values()
+        )
+    )
     if results_file.exists() and not args.overwrite:
         logger.error(
             "Results file {} already exists and --overwrite=False, exiting".format(

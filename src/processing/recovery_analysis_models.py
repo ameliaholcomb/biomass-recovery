@@ -58,10 +58,13 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
         token=token, year=year, data_type="recovery"
     )
 
-    filter_idx = _filter_pct_nonnan(opts.pct_agreement, recovery_sample)
-    filtered_recovery = recovery_sample[filter_idx]
-    # filter_idx2 = np.std(filtered_recovery, axis=1) <= 1
-    # filtered_recovery = filtered_recovery[filter_idx2]
+    if 'pctnonan' in opts.filter_regime.keys():
+        filter_idx = _filter_pct_nonnan(opts.filter_regime['pctnonan'], recovery_sample)
+        filtered_recovery = recovery_sample[filter_idx]
+    
+    if 'maxstd' in opts.filter_regime.keys():
+        filter_idx2 = np.std(filtered_recovery, axis=1) <= opts.filter_regime['maxstd']
+        filtered_recovery = filtered_recovery[filter_idx2]
 
     hist_summary = pd.DataFrame(
         {
@@ -84,7 +87,8 @@ def filter_shots(opts, finterface, chunk_id: Tuple[int, str]):
     del recovery_sample
     master_df = finterface.load_data(token=token, year=year, data_type="master")
     filtered = master_df[filter_idx]
-    # filtered = filtered[filter_idx2]
+    if 'maxstd' in opts.filter_regime.keys():
+        filtered = filtered[filter_idx2]
     # Note: Cannot assign df["shot_number"] = filtered["shot_number"]
     # This implicitly converts to float64 (for unknown reasons)
     # which is not big enough to hold the shot numbers, and silently makes them NaN.
