@@ -5,7 +5,7 @@ import datetime
 import pathlib
 import re
 from dataclasses import dataclass
-from typing import Iterable, Union
+from typing import Iterable, Union, List
 
 import geopandas as gpd
 import geopandas.array
@@ -16,6 +16,7 @@ from shapely.geometry import box
 import xarray
 
 from src.constants import WGS84
+
 
 @dataclass
 class GediNameMetadata:
@@ -33,16 +34,19 @@ class GediNameMetadata:
     granule_production_version: str
     release_number: str
 
+
 @dataclass
 class GediLPNameMetadata(GediNameMetadata):
-    """Data class container for metadata derived from GEDI file names 
+    """Data class container for metadata derived from GEDI file names
     released by the LP DAAC"""
+
     sub_orbit_granule: str
     pge_version_number: str
 
+
 @dataclass
 class GediORNLNameMetadata(GediNameMetadata):
-    """Data class container for metadata derived from GEDI file names 
+    """Data class container for metadata derived from GEDI file names
     released by the ORNL DAAC"""
 
 
@@ -76,6 +80,7 @@ GEDI_SUBPATTERN_ORNL = GediORNLNameMetadata(
     granule_production_version=r"\d{2}",
 )
 
+
 def _parse_lp_granule_filename(gedi_filename: str) -> GediLPNameMetadata:
     GEDI_SUBPATTERN = GEDI_SUBPATTERN_LP
     gedi_naming_pattern = re.compile(
@@ -102,6 +107,7 @@ def _parse_lp_granule_filename(gedi_filename: str) -> GediLPNameMetadata:
         )
     return GediLPNameMetadata(*parse_result.groups())
 
+
 def _parse_ornl_granule_filename(gedi_filename: str) -> GediORNLNameMetadata:
     GEDI_SUBPATTERN = GEDI_SUBPATTERN_ORNL
     gedi_naming_pattern = re.compile(
@@ -125,6 +131,7 @@ def _parse_ornl_granule_filename(gedi_filename: str) -> GediORNLNameMetadata:
             f"Filename {gedi_filename} does not conform the the GEDI naming pattern."
         )
     return GediORNLNameMetadata(*parse_result.groups())
+
 
 def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
     """
@@ -153,7 +160,7 @@ def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
     if level == 1 or level == 2:
         return _parse_lp_granule_filename(gedi_filename)
     # Levels 3 and 4 are distributed by the ORNL DAAC
-    elif level == 3 or level == 4: 
+    elif level == 3 or level == 4:
         return _parse_ornl_granule_filename(gedi_filename)
     else:
         raise ValueError(
@@ -161,12 +168,13 @@ def _parse_gedi_granule_filename(gedi_filename: str) -> GediNameMetadata:
         )
 
 
-
 class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
     def __init__(self, file_path: pathlib.Path):
         super().__init__(file_path, "r")
         self.file_path = file_path
-        self.beam_names = [name for name in self.keys() if name.startswith("BEAM")]
+        self.beam_names = [
+            name for name in self.keys() if name.startswith("BEAM")
+        ]
         self._parsed_filename_metadata = None
 
     @property
@@ -176,7 +184,9 @@ class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
     @property
     def filename_metadata(self) -> GediNameMetadata:
         if self._parsed_filename_metadata is None:
-            self._parsed_filename_metadata = _parse_gedi_granule_filename(self.filename)
+            self._parsed_filename_metadata = _parse_gedi_granule_filename(
+                self.filename
+            )
         return self._parsed_filename_metadata
 
     @property
@@ -219,11 +229,15 @@ class GediGranule(h5py.File):  # TODO  pylint: disable=missing-class-docstring
         elif isinstance(identifier, str):
             return self._beam_from_name(identifier)
         else:
-            raise ValueError("identifier must either be the beam index or beam name")
+            raise ValueError(
+                "identifier must either be the beam index or beam name"
+            )
 
     def _beam_from_index(self, beam_index: int) -> GediBeam:
         if not 0 <= beam_index < self.n_beams:
-            raise ValueError(f"Beam index must be between 0 and {self.n_beams-1}")
+            raise ValueError(
+                f"Beam index must be between 0 and {self.n_beams-1}"
+            )
 
         beam_name = self.beam_names[beam_index]
         return self._beam_from_name(beam_name)
@@ -280,12 +294,13 @@ class GediBeam(h5py.Group):
             GEDI granule files include the entire global granule track,
             which is often not needed for a small region of interest. If
             a bounding box is provided, this class will *attempt* to perform
-            optimizations such that computationally intensive data parsing 
+            optimizations such that computationally intensive data parsing
             operations take place only on the data within the region of interest.
             This will result in ONLY shots falling within the roi being included
             in the cached data (returned by main_data
             To re-parse the file with a new roi, use beam.reset_roi().
     """
+
     def __init__(self, granule: GediGranule, beam_name: str, roi: box = None):
         super().__init__(granule[beam_name].id)
         self.parent_granule = granule  # Reference to parent granule
@@ -346,21 +361,27 @@ class GediBeam(h5py.Group):
         if self._shot_geolocations is None:
             if self.parent_granule.product == "GEDI_L4A":
                 self._shot_geolocations = gpd.points_from_xy(
-                    x = self["lon_lowestmode"],
-                    y = self["lat_lowestmode"],
-                    crs = WGS84
+                    x=self["lon_lowestmode"],
+                    y=self["lat_lowestmode"],
+                    crs=WGS84,
                 )
             elif self.parent_granule.product == "GEDI_L2A":
                 self._shot_geolocations = gpd.points_from_xy(
-                    x = self["lon_lowestmode"],
-                    y = self["lat_lowestmode"],
-                    crs = WGS84
+                    x=self["lon_lowestmode"],
+                    y=self["lat_lowestmode"],
+                    crs=WGS84,
+                )
+            elif self.parent_granule.product == "GEDI_L2B":
+                self._shot_geolocations = gpd.points_from_xy(
+                    x=self["geolocation/lon_lowestmode"],
+                    y=self["geolocation/lat_lowestmode"],
+                    crs=WGS84,
                 )
             elif self.parent_granule.product == "GEDI_L1B":
                 self._shot_geolocations = gpd.points_from_xy(
-                    x = self["geolocation/longitude_lastbin"],
-                    y = self["geolocation/latitude_lastbin"],
-                    crs = WGS84
+                    x=self["geolocation/longitude_lastbin"],
+                    y=self["geolocation/latitude_lastbin"],
+                    crs=WGS84,
                 )
             else:
                 raise NotImplementedError(
@@ -369,24 +390,35 @@ class GediBeam(h5py.Group):
                 )
         return self._shot_geolocations
 
-
     @property
-    def main_data(self) -> gpd.GeoDataFrame:
+    def main_data(self, sql_format_arrays=False) -> gpd.GeoDataFrame:
         """
         Return the main data for all shots in beam as geopandas DataFrame.
 
         Supports the following products: GEDI_L1B, GEDI_L2A
 
         Returns:
-            gpd.GeoDataFrame: A geopandas DataFrame containing the main data for the
-                given beam object.
+            gpd.GeoDataFrame: A geopandas DataFrame containing the main data for the given beam object.
         """
         if self._cached_data is None:
             data = self._get_main_data_dict()
             geometry = self.shot_geolocations
-            self._cached_data = gpd.GeoDataFrame(data, geometry=geometry, crs=WGS84)
+            self._cached_data = gpd.GeoDataFrame(
+                data, geometry=geometry, crs=WGS84
+            )
 
         return self._cached_data
+
+    def sql_format_arrays(self) -> None:
+        """Forces array-type fields to be sql-formatted (text strings).
+
+        Until this function is called, array-type fields will be np.array() objects. This formatting can be undone by resetting the cache."""
+        array_cols = [c for c in self.main_data.columns if c.endswith("_z")]
+        for c in array_cols:
+            self._cached_data[c] = self.main_data[c].map(self._arr_to_str)
+
+    def reset_cache(self):
+        self._cached_data = None
 
     def reset_roi(self, new_roi: box = None) -> None:
         if new_roi == self.roi:
@@ -394,19 +426,36 @@ class GediBeam(h5py.Group):
         self.roi = new_roi
         self._cached_data = None
 
-
     def _get_main_data_dict(self) -> dict:
         """Returns correct main data depending on product"""
         if self.parent_granule.product == "GEDI_L1B":
             return self._get_gedi1b_main_data_dict()
         elif self.parent_granule.product == "GEDI_L2A":
             return self._get_gedi2a_main_data_dict()
+        elif self.parent_granule.product == "GEDI_L2B":
+            return self._get_gedi2b_main_data_dict()
         elif self.parent_granule.product == "GEDI_L4A":
             return self._get_gedi4a_main_data_dict()
         else:
             raise NotImplementedError(
                 f"No method to get main data for product {self.parent_granule.product}"
             )
+
+    def _accumulate_waveform_data(
+        self, name: str, start: int, end: int
+    ) -> np.array:
+        waveform_data_all = np.array(self[name][:])
+        data = []
+        for i in range(len(start)):
+            dz = waveform_data_all[
+                start[i] : end[i]
+            ]  # this is a view, not a copy
+            data.append(dz)
+        return data
+
+    def _arr_to_str(self, arr: Union[List[float], np.array]) -> str:
+        """Converts array type data to SQL-friendly string."""
+        return "{" + ", ".join(map(str, arr)) + "}"
 
     def _get_gedi4a_main_data_dict(self) -> dict:
         """
@@ -458,6 +507,101 @@ class GediBeam(h5py.Group):
             "pft_class": self["land_cover_data/pft_class"][:],
             "region_class": self["land_cover_data/region_class"][:],
         }
+        return data
+
+    def _get_gedi2b_main_data_dict(self) -> dict:
+        """
+        Return the main data for all shots in a GEDI L2B product beam as dictionary.
+
+        Returns:
+            dict: A dictionary containing the main data for all shots in the given
+                beam of the granule.
+        """
+        gedi_l2b_count_start = pd.to_datetime("2018-01-01T00:00:00Z")
+        data = {
+            # General identifiable data
+            "granule_name": [self.parent_granule.filename] * self.n_shots,
+            "shot_number": self["shot_number"][:],
+            "beam_type": [self.beam_type] * self.n_shots,
+            "beam_name": [self.name] * self.n_shots,
+            # Temporal data
+            "delta_time": self["geolocation/delta_time"][:],
+            "absolute_time": (
+                gedi_l2b_count_start
+                + pd.to_timedelta(self["delta_time"], unit="seconds")
+            ),
+            # Quality data
+            "algorithm_run_flag": self["algorithmrun_flag"][:],
+            "l2a_quality_flag": self["l2a_quality_flag"][:],
+            "l2b_quality_flag": self["l2b_quality_flag"][:],
+            "sensitivity": self["sensitivity"][:],
+            "degrade_flag": self["geolocation/degrade_flag"][:],
+            "stale_return_flag": self["stale_return_flag"][:],
+            "surface_flag": self["surface_flag"][:],
+            "solar_elevation": self["geolocation/solar_elevation"][:],
+            "solar_azimuth": self["geolocation/solar_azimuth"][:],
+            # Scientific data
+            "cover": self["cover"][:],
+            "cover_z": list(self["cover_z"][:]),
+            "fhd_normal": self["fhd_normal"][:],
+            "num_detectedmodes": self["num_detectedmodes"][:],
+            "omega": self["omega"][:],
+            "pai": self["pai"][:],
+            "pai_z": list(self["pai_z"][:]),
+            "pavd_z": list(self["pavd_z"][:].tolist()),
+            "pgap_theta": self["pgap_theta"][:],
+            "pgap_theta_error": self["pgap_theta_error"][:],
+            "rg": self["rg"][:],
+            "rh100": self["rh100"][:],
+            "rhog": self["rhog"][:],
+            "rhog_error": self["rhog_error"][:],
+            "rhov": self["rhov"][:],
+            "rhov_error": self["rhov_error"][:],
+            "rossg": self["rossg"][:],
+            "rv": self["rv"][:],
+            "rx_range_highestreturn": self["rx_range_highestreturn"][:],
+            # DEM
+            "dem_tandemx": self["geolocation/digital_elevation_model"][:],
+            # Land cover data: NOTE this is gridded and/or derived data
+            "gridded_leaf_off_flag": self["land_cover_data/leaf_off_flag"][:],
+            "gridded_leaf_on_doy": self["land_cover_data/leaf_on_doy"][:],
+            "gridded_leaf_on_cycle": self["land_cover_data/leaf_on_cycle"][:],
+            "interpolated_modis_nonvegetated": self[
+                "land_cover_data/modis_nonvegetated"
+            ][:],
+            "interpolated_modis_treecover": self[
+                "land_cover_data/modis_treecover"
+            ][:],
+            "gridded_pft_class": self["land_cover_data/pft_class"][:],
+            "gridded_region_class": self["land_cover_data/region_class"][:],
+            # Processing data
+            "selected_l2a_algorithm": self["selected_l2a_algorithm"][:],
+            "selected_rg_algorithm": self["selected_rg_algorithm"][:],
+            # Geolocation data
+            "lon_highestreturn": self["geolocation/lon_highestreturn"][:],
+            "lon_lowestmode": self["geolocation/lon_lowestmode"][:],
+            "longitude_bin0": self["geolocation/longitude_bin0"][:],
+            "longitude_bin0_error": self["geolocation/longitude_bin0_error"][:],
+            "lat_highestreturn": self["geolocation/lat_highestreturn"][:],
+            "lat_lowestmode": self["geolocation/lat_lowestmode"][:],
+            "latitude_bin0": self["geolocation/latitude_bin0"][:],
+            "latitude_bin0_error": self["geolocation/latitude_bin0_error"][:],
+            "elev_highestreturn": self["geolocation/elev_highestreturn"][:],
+            "elev_lowestmode": self["geolocation/elev_lowestmode"][:],
+            "elevation_bin0": self["geolocation/elevation_bin0"][:],
+            "elevation_bin0_error": self["geolocation/elevation_bin0_error"][:],
+            # waveform data
+            "waveform_count": self["rx_sample_count"][:],
+            "waveform_start": self["rx_sample_start_index"][:] - 1,
+        }
+
+        # handle array data
+        ## could delete waveform start/count after storing waveform chunks
+        start = data["waveform_start"]
+        end = start + data["waveform_count"]
+        data["pgap_theta_z"] = self._accumulate_waveform_data(
+            "pgap_theta_z", start, end
+        )
         return data
 
     def _get_gedi2a_main_data_dict(self) -> dict:
@@ -540,11 +684,17 @@ class GediBeam(h5py.Group):
             "elevation_bin0_error": self["geolocation/elevation_bin0_error"][:],
             # geolocation lastbin
             "latitude_lastbin": self["geolocation/latitude_lastbin"][:],
-            "latitude_lastbin_error": self["geolocation/latitude_lastbin_error"][:],
+            "latitude_lastbin_error": self[
+                "geolocation/latitude_lastbin_error"
+            ][:],
             "longitude_lastbin": self["geolocation/longitude_lastbin"][:],
-            "longitude_lastbin_error": self["geolocation/longitude_lastbin_error"][:],
+            "longitude_lastbin_error": self[
+                "geolocation/longitude_lastbin_error"
+            ][:],
             "elevation_lastbin": self["geolocation/elevation_lastbin"][:],
-            "elevation_lastbin_error": self["geolocation/elevation_lastbin_error"][:],
+            "elevation_lastbin_error": self[
+                "geolocation/elevation_lastbin_error"
+            ][:],
             # relative waveform position info in beam and ssub-granule
             "waveform_start": self["rx_sample_start_index"][:] - 1,
             "waveform_count": self["rx_sample_count"][:],
@@ -584,7 +734,9 @@ class GediBeam(h5py.Group):
             },
         )
 
-    def save_waveform(self, save_dir: pathlib.Path, overwrite: bool = False) -> None:
+    def save_waveform(
+        self, save_dir: pathlib.Path, overwrite: bool = False
+    ) -> None:
         waveform = self.waveform
         save_name = f"{self.parent_granule.filename[:-3]}_{self.name}.nc"
         save_path = pathlib.Path(save_dir) / save_name
