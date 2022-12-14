@@ -23,6 +23,57 @@ from functools import partial
 from typing import List, Optional
 
 
+def _check_and_format_shape(shp: gpd.GeoDataFrame) -> gpd.GeoSeries:
+
+    if len(shp) > 1:
+        print("This script only accepts one (multi)polygon at a time.")
+        print("Please split up each row of your shapefile into its own file.")
+        exit(1)
+    row = shp.geometry.values[0]
+    if row.type.startswith("Multi"):
+        multi = True
+    else:
+        multi = False
+
+    # # The CMR API cannot accept a shapefile with more than 5000 points,
+    # # so we offer to simplify the query to just the bounding box around the region.
+    if multi:
+        n_coords = sum([len(part.exterior.coords) for part in row.geoms])
+    else:
+        n_coords = len(row.exterior.coords)
+    if n_coords > 4999:
+        input(
+            (
+                "The NASA API can only accept up to 5000 vertices in a single shape,\n"
+                "but the shape you supplied has {} vertices.\n"
+                "If you would like to automatically simplify this shape to its\n"
+                "bounding box, press ENTER, otherwise Ctrl-C to quit."
+            ).format(n_coords)
+        )
+        if multi:
+            shp = gpd.GeoSeries(box(*row.bounds))
+
+    if multi:
+        oriented = gpd.GeoSeries([orient(s) for s in row.geoms])
+    else:
+        oriented = gpd.GeoSeries(orient(row))
+
+    print(oriented)
+
+    # print(shp.geometry.values[0].bounds)S
+    # bbox1 = gpd.GeoSeries(box(-60, 0, -59.995, 0.005))
+    # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
+    # exec_spark(
+    #     [bbox1], constants.GediProduct.L4A, download_only=args.download_only
+    # )
+
+    # bbox = gpd.read_file(
+    #     constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
+    # )
+    # boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
+    return oriented
+
+
 def _get_engine():
     # Since spark runs workers in their own process, we cannot share database connections
     # between workers. We just create a new connection for each query. This is reasonable because
@@ -143,12 +194,15 @@ def _write_db(product, gedi_data):
             index=False,
             if_exists="append",
         )
+        del gedi_data
     return granules_entry
 
 
 def _product_table(product):
     if product == constants.GediProduct.L4A:
         return "level_4a"
+    if product == constants.GediProduct.L2B:
+        return "level_2b"
     raise ValueError("No product table defined for the product " + product)
 
 
@@ -218,9 +272,18 @@ def exec_spark(
         input("To proceed to download this data, press ENTER >>> ")
     else:
         input("To proceed to download AND INGEST this data, press ENTER >>> ")
+    if not os.path.exists(constants.gedi_product_path(product)):
+        print(
+            "Creating directory {}".format(constants.gedi_product_path(product))
+        )
+        os.mkdir(constants.gedi_product_path(product))
 
     # Spark starts here
-    spark = SparkSession.builder.getOrCreate()
+    spark = (
+        SparkSession.builder.config("spark.executor.memory", "10g")
+        .config("spark.driver.memory", "4g")
+        .getOrCreate()
+    )
     name_url = required_granules[["granule_name", "granule_url"]].to_records(
         index=False
     )
@@ -247,41 +310,6 @@ def exec_spark(
     # reinsert database index on points
 
 
-# CREATE TABLE IF NOT EXISTS public.level_4a (
-#     granule_name text,
-#     shot_number bigint,
-#     beam_type text,
-#     beam_name text,
-#     delta_time double precision,
-#     absolute_time timestamp with time zone,
-#     sensitivity real,
-#     algorithm_run_flag smallint,
-#     degrade_flag smallint,
-#     l2_quality_flag smallint,
-#     l4_quality_flag smallint,
-#     predictor_limit_flag smallint,
-#     response_limit_flag smallint,
-#     surface_flag smallint,
-#     selected_algorithm smallint,
-#     selected_mode smallint,
-#     elev_lowestmode double precision,
-#     lat_lowestmode double precision,
-#     lon_lowestmode double precision,
-#     agbd double precision,
-#     agbd_pi_lower double precision,
-#     agbd_pi_upper double precision,
-#     agbd_se double precision,
-#     agbd_t double precision,
-#     agbd_t_se double precision,
-#     pft_class smallint,
-#     region_class smallint,
-#     geometry public.geometry(Point,4326)
-# );
-# CREATE TABLE IF NOT EXISTS public.level_4a_granules (
-#     granule_name text PRIMARY KEY,
-#     created_date timestamptz
-# );
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Download and ingest GEDI data"
@@ -289,6 +317,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--shapefile",
         help="Shapefile (zip) containing the world region to download.",
+        type=str,
+    )
+    parser.add_argument(
+        "--product",
+        help="Name of GEDI product. Currently supports 'L4a' and 'L2b'.",
         type=str,
     )
     parser.add_argument(
@@ -312,26 +345,25 @@ if __name__ == "__main__":
         print("Unable to locate file {}".format(shapefile))
         exit(1)
     shp = gpd.read_file(shapefile)
+    shp = _check_and_format_shape(shp)
 
-    # # The CMR API cannot accept a shapefile with more than 5000 points,
-    # # so we simplify our query to just the bounding box around the region.
-    bbox = gpd.GeoSeries(box(*shp.geometry.values[0].bounds))
-
-    # print(shp.geometry.values[0].bounds)
-    # bbox1 = gpd.GeoSeries(box(-60, 0, -59.995, 0.005))
-    # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
-    # exec_spark(
-    #     [bbox1], constants.GediProduct.L4A, download_only=args.download_only
-    # )
-
-    # bbox = gpd.read_file(
-    #     constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
-    # )
-    # boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
+    product_str = args.product
+    if not product_str:
+        print("Must supply a GEDI product string.")
+        print("e.g. --product=L4a")
+        exit(1)
+    if product_str.lower() == "l4a":
+        product = constants.GediProduct.L4A
+    elif product_str.lower() == "l2b":
+        product = constants.GediProduct.L2B
+    else:
+        print("Product {} not supported".format(product_str))
+        print("Please use one of L4A or L2B")
+        exit(1)
 
     exec_spark(
-        [bbox],
-        constants.GediProduct.L4A,
+        [shp],
+        product,
         download_only=args.download_only,
         dry_run=args.dry_run,
     )
