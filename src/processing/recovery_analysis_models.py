@@ -132,7 +132,6 @@ def run_ols_medians_model(experiment_id, dataframe):
             "agcd": median_agcds,
         }
     )
-    df.to_feather("/maps/forecol/data/Overlays/monte_carlo/medians.feather")
     ols = smf.ols("agcd ~ recovery", df).fit()
     ols_ci = ols.conf_int().loc["recovery"].tolist()
     ols_intercept_ci = ols.conf_int().loc["Intercept"].tolist()
