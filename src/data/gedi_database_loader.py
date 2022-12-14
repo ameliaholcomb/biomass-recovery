@@ -53,6 +53,7 @@ def parse_file(file: Path) -> gpd.GeoDataFrame:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                beam.sql_format_arrays()
                 granule_data.append(beam.main_data)
         except KeyError:
             logger.warn(
