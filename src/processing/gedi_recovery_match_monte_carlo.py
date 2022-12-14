@@ -10,17 +10,12 @@ import pyproj
 import utm
 
 from src import constants
-from src.processing.gedi_recovery_analysis import (
-    overlay_gedi_shots_and_recovery_raster,
-)
 from src.processing.jrc_processing import compute_recovery_period
 from src.data.jrc_loading import load_jrc_data
 from src.data.gedi_database import GediDatabase
-from src.utils.logging import get_logger
+from src.utils.logging_util import get_logger
 
 logger = get_logger(__file__)
-logger.setLevel(logging.DEBUG)
-
 
 # Mean GEDI shot geolocation error in meters
 # See Dubayah et al. 2021
@@ -63,23 +58,27 @@ def quickfilter_shots(gedi_shots, recovery_period):
     y_inds = get_idx(recovery_period.y.data, gedi_shots.lat_lowestmode.values)
     len_x = recovery_period.x.data.shape[0]
     len_y = recovery_period.y.data.shape[0]
-    filtered_shots_idx = []
-    for i in range(len(x_inds)):
-        y_ind = y_inds[i]
-        x_ind = x_inds[i]
-        if (
-            y_ind + 1 < len_y
-            and y_ind - 1 > 0
-            and x_ind + 1 < len_x
-            and x_ind - 1 > 0
-        ):
-            recovery_around_shot = recovery_period.data[
-                y_inds[i] - 1 : y_inds[i] + 2,
-                x_inds[i] - 1 : x_inds[i] + 2,
-            ]
-            if np.sum(recovery_around_shot > 0) > 4:
-                filtered_shots_idx.append(i)
-    return gedi_shots.iloc[filtered_shots_idx]
+    x_inds = np.clip(x_inds, 1, len_x - 2)
+    y_inds = np.clip(y_inds, 1, len_y - 2)
+
+    recovery_around_shot = np.row_stack(
+        [
+            recovery_period.data[y_inds - 1, x_inds - 1],
+            recovery_period.data[y_inds - 1, x_inds],
+            recovery_period.data[y_inds - 1, x_inds + 1],
+            recovery_period.data[y_inds, x_inds - 1],
+            recovery_period.data[y_inds, x_inds],
+            recovery_period.data[y_inds, x_inds + 1],
+            recovery_period.data[y_inds + 1, x_inds - 1],
+            recovery_period.data[y_inds + 1, x_inds],
+            recovery_period.data[y_inds + 1, x_inds + 1],
+        ]
+    )
+
+    filter_idx = np.argwhere(
+        np.sum(recovery_around_shot > 0, axis=0) > 4
+    ).flatten()
+    return gedi_shots.iloc[list(filter_idx)]
 
 
 def overlay_utm_sample_and_recovery_raster(

@@ -1,10 +1,9 @@
 import logging
 from pathlib import Path
 from typing import List
-from src.utils.logging import get_logger
+from src.utils import util_logging
 
-logger = get_logger(__file__)
-logger.setLevel(logging.INFO)
+logger = util_logging.get_logger(__name__)
 
 class FileProcessingCheckpointer(object):
     """Class to manage processing numerous files, with checkpointing."""

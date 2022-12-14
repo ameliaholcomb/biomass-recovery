@@ -7,10 +7,11 @@ from typing import List
 
 
 from src import constants
-from src.utils.logging import get_logger
 from src.processing import recovery_analysis
-logger = get_logger(__name__)
-logger.setLevel(logging.INFO)
+
+from src.utils import util_logging
+
+logger = util_logging.get_logger(__name__)
 
 
 def _get_paisagenslidar_path() -> pathlib.Path:

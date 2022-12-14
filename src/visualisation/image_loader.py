@@ -21,7 +21,6 @@ from src.constants import (
     WGS84,
 )
 from src.data.als_loading import load_raster
-from src.utils.logging import get_logger
 from src.visualisation.visualisation_params import (
     legend,
     opt_biomass,
@@ -33,8 +32,9 @@ from src.visualisation.visualisation_params import (
     opt_size,
 )
 
-logger = get_logger(__name__)
-logger.setLevel(logging.INFO)
+from src.utils import util_logging
+
+logger = util_logging.get_logger(__name__)
 
 
 class VisualisationCache:
