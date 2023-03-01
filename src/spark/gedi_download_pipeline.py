@@ -21,9 +21,9 @@ from src.data import gedi_database_loader
 from src import constants
 from functools import partial
 from typing import List, Optional
-from src.utils import util_logging
+from src.utils import logging_util
 
-logger = util_logging.get_logger(__name__)
+logger = logging_util.get_logger(__name__)
 
 
 def _check_and_format_shape(shp: gpd.GeoDataFrame) -> gpd.GeoSeries:
@@ -37,6 +37,7 @@ def _check_and_format_shape(shp: gpd.GeoDataFrame) -> gpd.GeoSeries:
         multi = True
     else:
         multi = False
+    oriented = None
 
     # # The CMR API cannot accept a shapefile with more than 5000 points,
     # # so we offer to simplify the query to just the bounding box around the region.
@@ -53,12 +54,11 @@ def _check_and_format_shape(shp: gpd.GeoDataFrame) -> gpd.GeoSeries:
                 "bounding box, press ENTER, otherwise Ctrl-C to quit."
             ).format(n_coords)
         )
-        if multi:
-            shp = gpd.GeoSeries(box(*row.bounds))
+        oriented = gpd.GeoSeries(box(*row.bounds))
 
-    if multi:
+    if multi and oriented is None:
         oriented = gpd.GeoSeries([orient(s) for s in row.geoms])
-    else:
+    if not multi and oriented is None:
         oriented = gpd.GeoSeries(orient(row))
 
     print(oriented)

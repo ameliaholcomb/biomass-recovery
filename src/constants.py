@@ -91,7 +91,9 @@ SIRGAS2000_UTM24S = "EPSG:31984"  # https://epsg.io/31984
 
 # ---------------- DATABASE CONSTANTS ----------------
 DB_HOST = os.getenv("DB_HOST")  # JASMIN database server
+DB_PORT = '5432'
 DB_NAME = os.getenv("DB_NAME")  # Database for GEDI shots
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_CONFIG = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
+DB_POSTGRES = 'postgresql'
+DB_CONFIG = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
