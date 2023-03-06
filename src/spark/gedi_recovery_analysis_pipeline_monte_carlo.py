@@ -282,12 +282,14 @@ if __name__ == "__main__":
         "--save_dir",
         help="Directory path to save the output data.",
         type=str,
+        required=True,
     )
     parser.add_argument(
         "-s",
         "--shapefile",
         help="Shapefile (zip) containing search area polygon.",
         type=str,
+        required=True,
     )
     parser.add_argument(
         "--years",
