@@ -9,6 +9,8 @@ from sqlalchemy import create_engine, inspect
 from src.constants import DB_CONFIG, WGS84
 from src.utils.logging_util import get_logger
 
+import warnings
+
 logger = get_logger(__file__)
 
 
@@ -30,10 +32,17 @@ def gedi_sql_query(
     # Spatial conditions
     if geometry is not None:
         crs = pyproj.CRS.from_user_input(crs)
-        conditions += [
-            "ST_Intersects(geometry, "
-            f"ST_GeomFromText('{geometry.to_wkt().values[0]}', {crs.to_epsg()}))"
-        ]
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="__len__ for multi-part geometries is deprecated and will be removed in Shapely 2.0",
+            )
+            conditions += [
+                "ST_Intersects(geometry, "
+                f"ST_GeomFromText('{geometry.to_wkt().values[0]}', {crs.to_epsg()}))"
+            ]
+
     # Combining conditions
     condition = (
         f" WHERE {' and '.join(conditions)}" if len(conditions) > 0 else ""
@@ -57,7 +66,12 @@ class GediDatabase(object):
 
     def __init__(self):
         self.engine = create_engine(DB_CONFIG, echo=False)
-        self.inspector = inspect(self.engine)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", "Did not recognize type 'geometry' of column"
+            )
+            self.inspector = inspect(self.engine)
+
         self.allowed_cols = {}
         for table_name in self.inspector.get_table_names():
             allowed_cols = {
