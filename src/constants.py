@@ -48,14 +48,9 @@ GEDI_L2A_PATH = gedi_product_path(GediProduct.L2A)
 GEDI_L4A_PATH = gedi_product_path(GediProduct.L4A)
 JRC_PATH = DATA_PATH / "JRC"
 ENV_VARS_PATH = DATA_PATH / "EnvVars"
-PLANET_PATH = DATA_PATH / "Planet"
-PAISAGENSLIDAR_PATH = DATA_PATH / "Paisagenslidar"
-EBALIDAR_PATH = DATA_PATH / "EBA_lidar"
 
 ENV_VARS_NAMES = ["defMean", "SCCsoil", "fpar", "lightning", "srtm"]
 
-# ---------------- API KEYS -------------------------
-PLANET_API_KEY = os.getenv("PLANET_API_KEY")
 
 # ---------------- LOGGING CONSTANTS ----------------
 DEFAULT_FORMATTER = logging.Formatter(
@@ -91,9 +86,11 @@ SIRGAS2000_UTM24S = "EPSG:31984"  # https://epsg.io/31984
 
 # ---------------- DATABASE CONSTANTS ----------------
 DB_HOST = os.getenv("DB_HOST")  # JASMIN database server
-DB_PORT = '5432'
+DB_PORT = "5432"
 DB_NAME = os.getenv("DB_NAME")  # Database for GEDI shots
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_POSTGRES = 'postgresql'
-DB_CONFIG = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DB_POSTGRES = "postgresql"
+DB_CONFIG = (
+    f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
