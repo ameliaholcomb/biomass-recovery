@@ -144,7 +144,6 @@ def _download_url(product, input):
                 "--auth-no-challenge=on",
                 "--keep-session-cookies",
                 "--content-disposition",
-                "-nc",
                 "-O",
                 temp.name,
                 url,
