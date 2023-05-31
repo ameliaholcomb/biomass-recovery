@@ -130,10 +130,9 @@ def _download_url(product, input):
     outfile_path = constants.gedi_product_path(product) / name
     if os.path.exists(outfile_path):
         return outfile_path
-    try:
-        temp = tempfile.NamedTemporaryFile(
-            dir=constants.gedi_product_path(product)
-        )
+    with tempfile.NamedTemporaryFile(
+        dir=constants.gedi_product_path(product)
+    ) as temp:
         subprocess.run(
             [
                 "wget",
@@ -151,11 +150,6 @@ def _download_url(product, input):
             check=True,
         )
         shutil.move(temp.name, outfile_path)
-    finally:
-        try:
-            temp.close()
-        except:
-            pass
     return outfile_path
 
 
