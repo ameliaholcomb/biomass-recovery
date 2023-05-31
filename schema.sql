@@ -160,6 +160,7 @@ CREATE TABLE public.level_4a (
     agbd_t_se double precision,
     pft_class smallint,
     region_class smallint,
+    leaf_off_flag smallint,
     geometry public.geometry(Point,4326)
 );
 

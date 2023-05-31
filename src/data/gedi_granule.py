@@ -506,6 +506,7 @@ class GediBeam(h5py.Group):
             # Land cover data
             "pft_class": self["land_cover_data/pft_class"][:],
             "region_class": self["land_cover_data/region_class"][:],
+            "leaf_off_flag": self["land_cover_data/leaf_off_flag"],
         }
         return data
 
