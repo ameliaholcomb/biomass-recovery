@@ -1,4 +1,6 @@
 import logging
+import re
+from typing import List, Union
 
 import geopandas as gpd
 import pandas as pd
@@ -13,6 +15,8 @@ import warnings
 
 logger = get_logger(__file__)
 
+COLUMN_CHECK_RE = re.compile("(.+)\((.+)\)")
+COLUMN_OPERATORS = ["AVG", "COUNT", "SUM"]
 
 def gedi_sql_query(
     table_name: str,
@@ -77,12 +81,13 @@ class GediDatabase(object):
             allowed_cols = {
                 col["name"] for col in self.inspector.get_columns(table_name)
             }
+            allowed_cols.add('*')
             self.allowed_cols[table_name] = allowed_cols
 
     def query(
         self,
         table_name: str,
-        columns: str = "*",
+        columns: Union[str, List[str]] = "*",
         geometry: gpd.GeoDataFrame = None,
         crs: str = WGS84,
         start_time: str = None,
@@ -95,14 +100,23 @@ class GediDatabase(object):
         if table_name not in self.allowed_cols:
             raise ValueError("Unsupported table {table_name}.")
 
+        sql_column_operator_used = False
         if columns != "*":
             for column in columns:
+                match = COLUMN_CHECK_RE.match(column)
+                if match:
+                    operator, column = match.groups()
+                    if operator.upper() not in COLUMN_OPERATORS:
+                        raise ValueError(
+                            f"`{operator}` not allowed. Must be one of {COLUMN_OPERATORS}"
+                        )
+                    sql_column_operator_used = True
                 if not column in self.allowed_cols[table_name]:
                     raise ValueError(
                         f"`{column}` not allowed. Must be one of {self.allowed_cols[table_name]}"
                     )
 
-        if use_geopandas or geometry is not None:
+        if use_geopandas or geometry is not None and not sql_column_operator_used:
             if columns != "*" and "geometry" not in columns:
                 columns += ["geometry"]
 
