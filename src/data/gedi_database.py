@@ -42,9 +42,13 @@ def gedi_sql_query(
                 "ignore",
                 message="__len__ for multi-part geometries is deprecated and will be removed in Shapely 2.0",
             )
-            conditions += [
+            queries = [
                 "ST_Intersects(geometry, "
-                f"ST_GeomFromText('{geometry.to_wkt().values[0]}', {crs.to_epsg()}))"
+                f"ST_GeomFromText('{x}', {crs.to_epsg()}))"
+                for x in geometry.to_wkt().values
+            ]
+            conditions += [
+                ' OR '.join(queries)
             ]
 
     # Combining conditions
