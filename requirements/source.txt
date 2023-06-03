@@ -8,6 +8,7 @@ h5py
 hvplot
 numpy
 pandas
+psutil
 psycopg2
 pyarrow
 pylr2
