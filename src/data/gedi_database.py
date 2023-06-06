@@ -27,6 +27,7 @@ def gedi_sql_query(
     end_time: str = None,
     limit: int = None,
     force: bool = False,
+    order_by: List[str] = [],
     **filters
 ):
     conditions = []
@@ -83,8 +84,12 @@ def gedi_sql_query(
             "Warning! This will load the entire table. To proceed set `force`=True."
         )
 
+    # Order by clauses
+    order = "" if len(order_by) == 0 else " ORDER BY "
+    order += ", ".join([(f"{x[1:]} DESC" if x[0] == "-" else x) for x in order_by])
+
     sql_query = (
-        f"SELECT {', '.join(columns)} FROM {table_name}" + condition + limits
+        f"SELECT {', '.join(columns)} FROM {table_name}" + condition + limits + order
     )
     return sql_query
 
@@ -118,6 +123,7 @@ class GediDatabase(object):
         limit: int = None,
         use_geopandas: bool = False,
         force: bool = False,
+        order_by: List[str] = [],
         **filters
     ) -> pd.DataFrame:
 
@@ -146,8 +152,19 @@ class GediDatabase(object):
         for column in filters:
             if column not in self.allowed_cols[table_name]:
                 raise ValueError(
-                    f"`{column}` not allowed as filter. Must be one of {sorted(list(self.allowed_cols[table_name]))} or `*`"
+                    f"`{column}` not allowed as filter. Must be one of {sorted(list(self.allowed_cols[table_name]))}"
                 )
+
+        for column in order_by:
+            # we use Django style notation for descending with "-column name"
+            if len(column) == 0:
+                raise ValueError("Empty column names a not allowed for sorting.")
+            if column[0] == '-':
+                column = column[1:]
+                if column not in self.allowed_cols[table_name]:
+                    raise ValueError(
+                        f"`{column}` not allowed for sorting. Must be one of {sorted(list(self.allowed_cols[table_name]))}"
+                    )
 
         if use_geopandas or geometry is not None and not sql_column_operator_used:
             if columns != "*" and "geometry" not in columns:
@@ -163,6 +180,8 @@ class GediDatabase(object):
                 start_time=start_time,
                 end_time=end_time,
                 force=force,
+                order_by=order_by,
+                **filters
             )
 
             logger.debug("SQL Query: %s", sql_query)
@@ -181,6 +200,7 @@ class GediDatabase(object):
                 start_time=start_time,
                 end_time=end_time,
                 force=force,
+                order_by=order_by,
                 **filters
             )
 
