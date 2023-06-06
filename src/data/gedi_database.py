@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import List, Union
+from typing import Any, List, Union
 
 import geopandas as gpd
 import pandas as pd
@@ -27,12 +27,12 @@ def gedi_sql_query(
     end_time: str = None,
     limit: int = None,
     force: bool = False,
+    **filters
 ):
-
     conditions = []
     # Temporal conditions
     if start_time is not None and end_time is not None:
-        conditions += [f"absolute_time between '{start_time}' and '{end_time}'"]
+        conditions += [f"(absolute_time between '{start_time}' AND '{end_time}')"]
     # Spatial conditions
     if geometry is not None:
         crs = pyproj.CRS.from_user_input(crs)
@@ -47,13 +47,33 @@ def gedi_sql_query(
                 f"ST_GeomFromText('{x}', {crs.to_epsg()}))"
                 for x in geometry.to_wkt().values
             ]
+            # Parenthesis here are important, as AND has precedence, so if you
+            # don't enclose this you'll just restrict the final entry in the list
             conditions += [
-                ' OR '.join(queries)
+                f"({' OR '.join(queries)})"
             ]
+
+    for column in filters:
+        value = filters[column]
+        comparitor = "="
+
+        def _escape_value(v: Any) -> Any:
+            if isinstance(v, str):
+                return f"'{v}'"
+            return v
+
+        if isinstance(value, list):
+            comparitor = "IN"
+            value = [_escape_value(x) for x in value]
+        else:
+            value = _escape_value(value)
+        conditions += [
+            f"({column} {comparitor} {value})"
+        ]
 
     # Combining conditions
     condition = (
-        f" WHERE {' and '.join(conditions)}" if len(conditions) > 0 else ""
+        f" WHERE {' AND '.join(conditions)}" if len(conditions) > 0 else ""
     )
     # Setting limits
     limits = f" LIMIT {limit}" if limit is not None else ""
@@ -85,7 +105,6 @@ class GediDatabase(object):
             allowed_cols = {
                 col["name"] for col in self.inspector.get_columns(table_name)
             }
-            allowed_cols.add('*')
             self.allowed_cols[table_name] = allowed_cols
 
     def query(
@@ -99,6 +118,7 @@ class GediDatabase(object):
         limit: int = None,
         use_geopandas: bool = False,
         force: bool = False,
+        **filters
     ) -> pd.DataFrame:
 
         if table_name not in self.allowed_cols:
@@ -115,10 +135,19 @@ class GediDatabase(object):
                             f"`{operator}` not allowed. Must be one of {COLUMN_OPERATORS}"
                         )
                     sql_column_operator_used = True
-                if not column in self.allowed_cols[table_name]:
+                if (column not in self.allowed_cols[table_name]) and (column is not "*"):
                     raise ValueError(
-                        f"`{column}` not allowed. Must be one of {self.allowed_cols[table_name]}"
+                        f"`{column}` not allowed. Must be one of {sorted(list(self.allowed_cols[table_name]))} or `*`"
                     )
+
+        # We use these for equality filters as a simple way to expand the
+        # where clause. If this was behind an API we'd also want to watch out
+        # SQL injection attempts here!
+        for column in filters:
+            if column not in self.allowed_cols[table_name]:
+                raise ValueError(
+                    f"`{column}` not allowed as filter. Must be one of {sorted(list(self.allowed_cols[table_name]))} or `*`"
+                )
 
         if use_geopandas or geometry is not None and not sql_column_operator_used:
             if columns != "*" and "geometry" not in columns:
@@ -152,6 +181,7 @@ class GediDatabase(object):
                 start_time=start_time,
                 end_time=end_time,
                 force=force,
+                **filters
             )
 
             logger.debug("SQL Query: %s", sql_query)
