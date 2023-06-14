@@ -1,6 +1,6 @@
 import pytest
 
-from src.data.gedi_database import gedi_sql_query
+from src.data.gedi_database import gedi_sql_query, Like, RegEx
 
 def test_simple_query():
 	query = gedi_sql_query(
@@ -55,3 +55,19 @@ def test_add_multiple_filter():
 		beam_type="full"
 	)
 	assert query == "SELECT * FROM level_4a WHERE (quality = 1) AND (beam_type = 'full')"
+
+def test_like_predicate():
+	query = gedi_sql_query(
+		"level_4a",
+		quality=1,
+		beam_type=Like("ful")
+	)
+	assert query == "SELECT * FROM level_4a WHERE (quality = 1) AND (beam_type LIKE 'ful')"
+
+def test_regex_predicate():
+	query = gedi_sql_query(
+		"level_4a",
+		quality=1,
+		beam_type=RegEx("f.*")
+	)
+	assert query == "SELECT * FROM level_4a WHERE (quality = 1) AND (beam_type ~ 'f.*')"

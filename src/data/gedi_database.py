@@ -18,6 +18,18 @@ logger = get_logger(__file__)
 COLUMN_CHECK_RE = re.compile("(.+)\((.+)\)")
 COLUMN_OPERATORS = ["AVG", "COUNT", "SUM"]
 
+
+class QueryPredicate:
+    def __init__(self, value):
+        self.value = value
+
+class Like(QueryPredicate):
+    predicate = "LIKE"
+
+class RegEx(QueryPredicate):
+    predicate = "~"
+
+
 def gedi_sql_query(
     table_name: str,
     columns: str = "*",
@@ -66,8 +78,12 @@ def gedi_sql_query(
         if isinstance(value, list):
             comparitor = "IN"
             value = [_escape_value(x) for x in value]
+        elif isinstance(value, QueryPredicate):
+            comparitor = value.predicate
+            value = _escape_value(value.value)
         else:
             value = _escape_value(value)
+
         conditions += [
             f"({column} {comparitor} {value})"
         ]
