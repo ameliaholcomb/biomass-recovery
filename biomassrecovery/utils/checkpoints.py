@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 from typing import List
-from src.utils import util_logging
+from biomassrecovery.utils import util_logging
 
 logger = util_logging.get_logger(__name__)
 

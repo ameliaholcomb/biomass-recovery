@@ -1,6 +1,6 @@
 import pytest
 
-from src.data.gedi_database import gedi_sql_query, Like, RegEx
+from biomassrecovery.data.gedi_database import gedi_sql_query, Like, RegEx
 
 def test_simple_query():
 	query = gedi_sql_query(

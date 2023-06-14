@@ -10,8 +10,8 @@ import rioxarray as rxr
 import xarray as xr
 from tqdm.autonotebook import tqdm
 
-from src.environment import JRC_PATH
-from src.utils.logging_util import get_logger
+from biomassrecovery.environment import JRC_PATH
+from biomassrecovery.utils.logging_util import get_logger
 
 logger = get_logger(__file__)
 

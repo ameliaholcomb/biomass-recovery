@@ -8,9 +8,9 @@ import pyproj
 import sqlalchemy as db
 from sqlalchemy import create_engine, inspect
 
-from src.constants import WGS84
-from src.environment import DB_CONFIG
-from src.utils.logging_util import get_logger
+from biomassrecovery.constants import WGS84
+from biomassrecovery.environment import DB_CONFIG
+from biomassrecovery.utils.logging_util import get_logger
 
 import warnings
 

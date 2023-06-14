@@ -5,7 +5,7 @@ import pytest
 from geopandas import gpd
 from shapely import MultiPolygon, Polygon
 
-from src.data.gedi_download_pipeline import check_and_format_shape, DetailError
+from biomassrecovery.data.gedi_download_pipeline import check_and_format_shape, DetailError
 
 def _make_polygon(lat: float, lng: float, radius: float) -> Polygon:
 	origin_lat = lat + radius

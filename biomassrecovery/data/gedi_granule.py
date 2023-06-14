@@ -15,7 +15,7 @@ import pandas as pd
 from shapely.geometry import box
 import xarray
 
-from src.constants import WGS84
+from biomassrecovery.constants import WGS84
 
 
 @dataclass

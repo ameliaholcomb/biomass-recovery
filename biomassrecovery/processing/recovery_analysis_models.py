@@ -4,7 +4,7 @@ import pandas as pd
 import statsmodels.formula.api as smf
 from typing import Tuple
 
-from src.utils import wild_bootstrap as wb
+from biomassrecovery.utils import wild_bootstrap as wb
 
 
 def _filter_pct_agreement(pct_agreement, recovery_sample):

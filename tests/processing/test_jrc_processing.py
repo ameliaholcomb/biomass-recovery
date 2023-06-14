@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.processing.jrc_processing import last_of_value, first_of_value
+from biomassrecovery.processing.jrc_processing import last_of_value, first_of_value
 
 @pytest.mark.parametrize(
 	"input,value,expected",
