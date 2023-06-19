@@ -71,7 +71,7 @@ def unzip(
             else:
                 # To create a file at a certain out path, first extract to
                 # temporary directory and then move to desired out path
-                with tempfile.TemporaryDirectory(prefix=str(out_path) + "/") as tmp_dir:
+                with tempfile.TemporaryDirectory() as tmp_dir:
                     logger.debug("Temporary dir: %s", tmp_dir)
                     tmp_path = pathlib.Path(tmp_dir)
                     zip_archive.extract(compressed_file, path=tmp_path)
