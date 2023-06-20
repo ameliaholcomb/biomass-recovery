@@ -8,7 +8,8 @@ import pyproj
 import sqlalchemy as db
 from sqlalchemy import create_engine, inspect
 
-from src.constants import DB_CONFIG, WGS84
+from src.constants import WGS84
+from src.environment import DB_CONFIG
 from src.utils.logging_util import get_logger
 
 import warnings

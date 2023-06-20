@@ -8,7 +8,7 @@ import rioxarray as rxr
 import xarray as xr
 from tqdm.autonotebook import tqdm
 
-from src.constants import JRC_PATH
+from src.environment import JRC_PATH
 from src.utils.logging_util import get_logger
 from src.utils.os import list_content
 

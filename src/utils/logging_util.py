@@ -4,7 +4,7 @@ import os
 import sys
 from logging.handlers import TimedRotatingFileHandler
 
-from src.constants import DEFAULT_FORMATTER, DEFAULT_LOG_FILE, DEFAULT_LOG_LEVEL
+from src.environment import DEFAULT_FORMATTER, DEFAULT_LOG_FILE, DEFAULT_LOG_LEVEL
 
 
 def get_console_handler(
