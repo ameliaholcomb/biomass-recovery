@@ -17,6 +17,7 @@ import shutil
 import sqlalchemy
 
 from src.data.gedi_cmr_query import query
+from src.data.gedi_download_pipeline import check_and_format_shape, DetailError
 from src.data import gedi_database_loader
 from src import constants
 from src import environment
@@ -25,57 +26,6 @@ from typing import List, Optional
 from src.utils import logging_util
 
 logger = logging_util.get_logger(__name__)
-
-
-def _check_and_format_shape(shp: gpd.GeoDataFrame) -> gpd.GeoSeries:
-
-    if len(shp) > 1:
-        print("This script only accepts one (multi)polygon at a time.")
-        print("Please split up each row of your shapefile into its own file.")
-        exit(1)
-    row = shp.geometry.values[0]
-    if row.type.startswith("Multi"):
-        multi = True
-    else:
-        multi = False
-    oriented = None
-
-    # # The CMR API cannot accept a shapefile with more than 5000 points,
-    # # so we offer to simplify the query to just the bounding box around the region.
-    if multi:
-        n_coords = sum([len(part.exterior.coords) for part in row.geoms])
-    else:
-        n_coords = len(row.exterior.coords)
-    if n_coords > 4999:
-        input(
-            (
-                "The NASA API can only accept up to 5000 vertices in a single shape,\n"
-                "but the shape you supplied has {} vertices.\n"
-                "If you would like to automatically simplify this shape to its\n"
-                "bounding box, press ENTER, otherwise Ctrl-C to quit."
-            ).format(n_coords)
-        )
-        oriented = gpd.GeoSeries(box(*row.bounds))
-
-    if multi and oriented is None:
-        oriented = gpd.GeoSeries([orient(s) for s in row.geoms])
-    if not multi and oriented is None:
-        oriented = gpd.GeoSeries(orient(row))
-
-    print(oriented)
-
-    # print(shp.geometry.values[0].bounds)S
-    # bbox1 = gpd.GeoSeries(box(-60, 0, -59.995, 0.005))
-    # bbox2 = gpd.GeoSeries(box(-60, 0.05, -59.75, 0.20))
-    # exec_spark(
-    #     [bbox1], constants.GediProduct.L4A, download_only=args.download_only
-    # )
-
-    # bbox = gpd.read_file(
-    #     environment.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
-    # )
-    # boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
-    return oriented
 
 
 def _get_engine():
@@ -342,7 +292,23 @@ if __name__ == "__main__":
         print("Unable to locate file {}".format(shapefile))
         exit(1)
     shp = gpd.read_file(shapefile)
-    shp = _check_and_format_shape(shp)
+    try:
+        try:
+            shp = check_and_format_shape(shp)
+        except DetailError:
+            input(
+                (
+                    "The NASA API can only accept up to 5000 vertices in a single shape,\n"
+                    "but the shape you supplied has {} vertices.\n"
+                    "If you would like to automatically simplify this shape to its\n"
+                    "bounding box, press ENTER, otherwise Ctrl-C to quit."
+                ).format(n_coords)
+            )
+            shp = check_and_format_shape(shp, simplify=True)
+    except ValueError:
+        print("This script only accepts one (multi)polygon at a time.")
+        print("Please split up each row of your shapefile into its own file.")
+        exit(1)
 
     product_str = args.product
     if not product_str:
