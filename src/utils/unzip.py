@@ -54,7 +54,7 @@ def unzip(
         for compressed_file in files_progress:
             # Get relative path of file in zip archive
             if remove_archive_name:
-                relative_path = compressed_file.filename.split("/", maxsplit=1)[1]
+                relative_path = compressed_file.filename.split("/", maxsplit=1)[-1]
             else:
                 relative_path = compressed_file.filename
 
