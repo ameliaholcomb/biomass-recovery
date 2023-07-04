@@ -136,6 +136,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if args.dataset and args.dataset not in JRC_DATASETS:
+        print(f"Dataset must be one of {JRC_DATASETS}")
+        exit(1)
     datasets = JRC_DATASETS if not args.dataset else [args.dataset]
 
     if args.use_multiple_workers:
