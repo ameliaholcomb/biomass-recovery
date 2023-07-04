@@ -10,7 +10,7 @@ import subprocess
 import psutil
 import requests
 
-from src.constants import DATA_PATH
+from src.environment import DATA_PATH
 from src.utils.logging_util import get_logger
 
 logger = get_logger(__name__)

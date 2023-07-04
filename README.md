@@ -57,7 +57,7 @@ The above diagram shows an overflow of the steps taken to generate the results. 
 Fork this repository, create a new python environment, and install the project requirements, including python packages in `requirements/requirements.txt`.
 
 Set appropriate environment variables:
-Change `src/constants.py` to contain the database location and password for your database. Set the file paths to appropriate values.
+Change `src/environment.py` to contain the database location and password for your database. Set the file paths to appropriate values.
 Create a file called `.env` in your home directory with the following format:
 
 ```python

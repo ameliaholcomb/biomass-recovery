@@ -19,6 +19,7 @@ import sqlalchemy
 from src.data.gedi_cmr_query import query
 from src.data import gedi_database_loader
 from src import constants
+from src import environment
 from functools import partial
 from typing import List, Optional
 from src.utils import logging_util
@@ -71,7 +72,7 @@ def _check_and_format_shape(shp: gpd.GeoDataFrame) -> gpd.GeoSeries:
     # )
 
     # bbox = gpd.read_file(
-    #     constants.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
+    #     environment.USER_PATH / "shapefiles" / "bbox_formatted.gpd"
     # )
     # boxes = [gpd.GeoSeries(orient(b)) for b in bbox.geometry.values[0].geoms]
     return oriented
@@ -81,12 +82,12 @@ def _get_engine():
     # Since spark runs workers in their own process, we cannot share database connections
     # between workers. We just create a new connection for each query. This is reasonable because
     # most of our queries involve inserting a large amount of data into the database.
-    return sqlalchemy.create_engine(constants.DB_CONFIG, echo=False)
+    return sqlalchemy.create_engine(environment.DB_CONFIG, echo=False)
 
 
 def _fetch_cookies():
     print("No authentication cookies found, fetching earthdata cookies ...")
-    netrc_file = constants.USER_PATH / ".netrc"
+    netrc_file = environment.USER_PATH / ".netrc"
     add_login = True
     if netrc_file.exists():
         with open(netrc_file, "r") as f:
@@ -94,15 +95,15 @@ def _fetch_cookies():
                 add_login = False
 
     if add_login:
-        with open(constants.USER_PATH / ".netrc", "a+") as f:
+        with open(environment.USER_PATH / ".netrc", "a+") as f:
             f.write(
                 "\nmachine urs.earthdata.nasa.gov login {} password {}".format(
-                    constants.EARTHDATA_USER, constants.EARTHDATA_PASSWORD
+                    environment.EARTHDATA_USER, environment.EARTHDATA_PASSWORD
                 )
             )
             os.fchmod(f.fileno(), 0o600)
 
-    constants.EARTH_DATA_COOKIE_FILE.touch()
+    environment.EARTH_DATA_COOKIE_FILE.touch()
     subprocess.run(
         [
             "wget",
@@ -127,19 +128,19 @@ def _query_granule_metadata(bounds, product):
 def _download_url(product, input):
 
     name, url = input
-    outfile_path = constants.gedi_product_path(product) / name
+    outfile_path = environment.gedi_product_path(product) / name
     if os.path.exists(outfile_path):
         return outfile_path
     with tempfile.NamedTemporaryFile(
-        dir=constants.gedi_product_path(product)
+        dir=environment.gedi_product_path(product)
     ) as temp:
         subprocess.run(
             [
                 "wget",
                 "--load-cookies",
-                constants.EARTH_DATA_COOKIE_FILE,
+                environment.EARTH_DATA_COOKIE_FILE,
                 "--save-cookies",
-                constants.EARTH_DATA_COOKIE_FILE,
+                environment.EARTH_DATA_COOKIE_FILE,
                 "--auth-no-challenge=on",
                 "--keep-session-cookies",
                 "--content-disposition",
@@ -218,7 +219,7 @@ def exec_spark(
     download_only: bool,
     dry_run: bool,
 ):
-    if not os.path.exists(constants.EARTH_DATA_COOKIE_FILE):
+    if not os.path.exists(environment.EARTH_DATA_COOKIE_FILE):
         _fetch_cookies()
 
     granule_metadata = _query_granule_metadata(bounds, product).drop_duplicates(
@@ -268,11 +269,11 @@ def exec_spark(
         input("To proceed to download this data, press ENTER >>> ")
     else:
         input("To proceed to download AND INGEST this data, press ENTER >>> ")
-    if not os.path.exists(constants.gedi_product_path(product)):
+    if not os.path.exists(environment.gedi_product_path(product)):
         print(
-            "Creating directory {}".format(constants.gedi_product_path(product))
+            "Creating directory {}".format(environment.gedi_product_path(product))
         )
-        os.mkdir(constants.gedi_product_path(product))
+        os.mkdir(environment.gedi_product_path(product))
 
     # Spark starts here
     spark = (

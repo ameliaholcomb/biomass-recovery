@@ -6,7 +6,7 @@ import pandas as pd
 import pathlib
 import rioxarray as rxr
 
-from src.constants import ENV_VARS_PATH
+from src.environment import ENV_VARS_PATH
 from src.utils.logging import get_logger
 
 logger = get_logger(__file__)
@@ -28,7 +28,7 @@ def main(
 ):
     if not outdir.exists():
         raise FileNotFoundError(f'Could not find specified outdir {outdir}')
-    
+
     if (outdir / 'gedi_envlayers.feather').exists() and not overwrite:
         print(f'Outfile {outdir}/gedi_envlayers.feather already exists and overwrite set to false, returning')
         return 1
@@ -38,7 +38,7 @@ def main(
 
     if not layerdir.exists():
         raise FileNotFoundError(f'Could not find specified layerdir {layerdir}')
-    
+
     layers = layerdir.glob('*.tif')
 
     gedi = pd.read_feather(gedifile)
@@ -71,7 +71,7 @@ if __name__ == '__main__':
        "-g",
         "--gedifile",
         help="The path to the feather file containing GEDI shots for overlay.",
-        type=str, 
+        type=str,
     )
     parser.add_argument(
         "-l",
