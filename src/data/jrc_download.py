@@ -127,7 +127,7 @@ if __name__ == "__main__":
         "-d",
         "--dataset",
         help=(
-            "The dataset to look for a last observation for. Can be one of"
+            "The dataset to download. Can be one of"
             f"{JRC_DATASETS}"
         ),
         type=str,
