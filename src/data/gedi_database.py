@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 import geopandas as gpd
 import pandas as pd
@@ -33,11 +33,11 @@ class RegEx(QueryPredicate):
 def gedi_sql_query(
     table_name: str,
     columns: str = "*",
-    geometry: gpd.GeoSeries = None,
+    geometry: Optional[gpd.GeoSeries] = None,
     crs: str = WGS84,
-    start_time: str = None,
-    end_time: str = None,
-    limit: int = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    limit: Optional[int] = None,
     force: bool = False,
     order_by: List[str] = [],
     **filters
@@ -132,19 +132,53 @@ class GediDatabase(object):
         self,
         table_name: str,
         columns: Union[str, List[str]] = "*",
-        geometry: gpd.GeoDataFrame = None,
+        geometry: Optional[gpd.GeoDataFrame] = None,
         crs: str = WGS84,
-        start_time: str = None,
-        end_time: str = None,
-        limit: int = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        limit: Optional[int] = None,
         use_geopandas: bool = False,
         force: bool = False,
         order_by: List[str] = [],
         **filters
     ) -> pd.DataFrame:
+        """
+        Query the database to get data.
+
+        In addition to the named parameters, you can add additional keyword parameters that
+        will act as equality filters, with all filters being ANDed together. The values can
+        be a raw python values (tested with = for single values or IN for lists), or you can
+        wrap the values in Like or RegEx classes to have the filter tested with those.
+
+        Args:
+            table_name (str): The name of the table to query.
+            columns (Union[str, List[str]]): The column or list of columns you
+                would like returned. Can be "*" for all column (the default). You
+                can also specify AVG, COUNT, and SUM SQL operators on columns.
+            geometry (Optional[gpd.GeoDataFrame]): Optional geometry(s) that can
+                be used to constrain the results to those that intersect.
+            crs (str): Coordinate reference system, defaults to WSG84.
+            start_time (Optional[str]): Optional lower time bounds for results. If specified,
+                end_time must also be provided. String must be SQL date format.
+            end_time (Optional[str]): Optional upper time bounds for results. If specified,
+                start_time must also be provided. String myst be SQL data format.
+            limit (Optional[int]): Optional limit to how many results are returned.
+            use_geopandas (bool): Specify if geopandas should be used for result. Overridden
+                if geometry constraint is provided.
+            force (bool): by default method will not return all data, throwing an exception on
+                requests for all rows from all columns. This overrides that behaviour.
+            order_by (List[str]): Optional specification of column ordering for results. Provide
+                either column name for ascending, or column name prefixed with "-" for descending.
+
+        Returns:
+            pd.Dataframe: A dataframe containing the rows that match the query.
+        """
 
         if table_name not in self.allowed_cols:
             raise ValueError("Unsupported table {table_name}.")
+
+        if (start_time is None) != (end_time is None):
+            raise ValueError("Either both start_time and end_time must be provided, or neither")
 
         sql_column_operator_used = False
         if columns != "*":
