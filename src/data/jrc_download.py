@@ -2,6 +2,7 @@
 Script for downloading data from EU TMF project
     https://forobs.jrc.ec.europa.eu/TMF/download/#download
 """
+import argparse
 import multiprocessing
 import pathlib
 import subprocess
@@ -111,19 +112,45 @@ def download_jrc_all():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="JRC download script"
+    )
+    parser.add_argument(
+        "--use_multiple_workers",
+        help=(
+            "If set then a thread will be spawned for each dataset category to be downloaded."
+        ),
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument(
+        "-d",
+        "--dataset",
+        help=(
+            "The dataset to download. Can be one of"
+            f"{JRC_DATASETS}"
+        ),
+        type=str,
+        default="",
+        nargs="?",  # Argument is optional
+    )
 
-    use_multiple_workers = True
+    args = parser.parse_args()
+    if args.dataset and args.dataset not in JRC_DATASETS:
+        print(f"Dataset must be one of {JRC_DATASETS}")
+        exit(1)
+    datasets = JRC_DATASETS if not args.dataset else [args.dataset]
 
-    if use_multiple_workers:
+    if args.use_multiple_workers:
         print("Using multiple workers.")
         # Make sure num_workers isn't higher than available CPUs
         core_count = psutil.cpu_count(logical=False)
-        dataset_count = len(JRC_DATASETS)
+        dataset_count = len(datasets)
         n_workers = min(dataset_count, core_count)
 
         # Set up multiprocessing download
         pool = multiprocessing.Pool(n_workers)
-        pool.map(download_jrc_dataset, JRC_DATASETS)
+        pool.map(download_jrc_dataset, datasets)
     else:
         # Download all data sequentially on one core
         download_jrc_all()
