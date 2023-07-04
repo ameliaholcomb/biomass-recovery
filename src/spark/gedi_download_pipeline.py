@@ -295,14 +295,14 @@ if __name__ == "__main__":
     try:
         try:
             shp = check_and_format_shape(shp)
-        except DetailError:
+        except DetailError as exc:
             input(
                 (
                     "The NASA API can only accept up to 5000 vertices in a single shape,\n"
                     "but the shape you supplied has {} vertices.\n"
                     "If you would like to automatically simplify this shape to its\n"
                     "bounding box, press ENTER, otherwise Ctrl-C to quit."
-                ).format(n_coords)
+                ).format(exc.n_coords)
             )
             shp = check_and_format_shape(shp, simplify=True)
     except ValueError:

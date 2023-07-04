@@ -65,4 +65,4 @@ def test_too_many_points_simplify():
 	geometry = gpd.GeoSeries(polygon)
 
 	checked = check_and_format_shape(geometry, simplify=True)
-	assert checked is not None
+	checked.contains(geometry)

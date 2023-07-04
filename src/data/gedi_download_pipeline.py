@@ -4,6 +4,8 @@ from shapely.geometry import box
 
 class DetailError(Exception):
     """Used when too many points in a shape for NASA's API"""
+    def __init__(self, n_coords: int):
+        self.n_coords = n_coords
 
 def check_and_format_shape(shp: gpd.GeoDataFrame, simplify: bool = False) -> gpd.GeoSeries:
     if len(shp) > 1:
@@ -20,7 +22,7 @@ def check_and_format_shape(shp: gpd.GeoDataFrame, simplify: bool = False) -> gpd
         n_coords = len(row.exterior.coords)
     if n_coords > 4999:
         if not simplify:
-            raise DetailError("Too many coords")
+            raise DetailError(n_coords)
         oriented = gpd.GeoSeries(box(*row.bounds))
 
     if multi and oriented is None:
