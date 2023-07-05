@@ -1,3 +1,4 @@
+import math
 import tempfile
 
 import pytest
@@ -50,7 +51,8 @@ def test_multi_polygon_shapes():
 def test_too_many_points_dont_simplify():
 	points = []
 	for i in range(5001):
-		points.append((0.1, 0.0001 * i))
+		angle = math.pi / (2 * 5001)
+		points.append((math.sin(angle), math.cos(angle)))
 	polygon = Polygon(points)
 	geometry = gpd.GeoSeries(polygon)
 
@@ -60,9 +62,10 @@ def test_too_many_points_dont_simplify():
 def test_too_many_points_simplify():
 	points = []
 	for i in range(5001):
-		points.append((0.1, 0.0001 * i))
+		angle = (math.pi / (2 * 5001)) * i
+		points.append((math.sin(angle), math.cos(angle)))
 	polygon = Polygon(points)
 	geometry = gpd.GeoSeries(polygon)
 
 	checked = check_and_format_shape(geometry, simplify=True)
-	checked.contains(geometry)
+	assert checked.contains(geometry).all()
