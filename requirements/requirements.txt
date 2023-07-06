@@ -181,7 +181,6 @@ snuggs==1.4.7
 sortedcontainers==2.4.0
 soupsieve==2.3.1
 SQLAlchemy==1.4.39
--e git+ssh://git@github.com/ameliaholcomb/biomass-recovery.git@3b42b66f89ed7dff4cfe7efc27f395df94b95cf1#egg=src
 stack-data==0.1.4
 statsmodels==0.13.2
 tabulate==0.8.9
