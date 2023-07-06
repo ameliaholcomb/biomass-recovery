@@ -33,7 +33,7 @@ This project uses the following data sources:
 ├── requirements       <- Directory containing the requirement files.
 │
 ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-├── src                <- Source code for use in this project.
+├── biomassrecovery    <- Source code for use in this project.
 │   ├── __init__.py    <- Makes src a Python module
 │   │
 │   ├── data           <- Functions to download and parse data
@@ -57,7 +57,7 @@ The above diagram shows an overflow of the steps taken to generate the results. 
 Fork this repository, create a new python environment, and install the project requirements, including python packages in `requirements/requirements.txt`.
 
 Set appropriate environment variables:
-Change `src/environment.py` to contain the database location and password for your database. Set the file paths to appropriate values.
+Change `biomassrecovery/environment.py` to contain the database location and password for your database. Set the file paths to appropriate values.
 Create a file called `.env` in your home directory with the following format:
 
 ```python
@@ -79,13 +79,13 @@ DB_PASSWORD="<db-password>"
 
 ### DATA DOWNLOAD AND SETUP
 GEDI data: The GEDI data is to be stored in a PostGIS database. Set up a new PostGIS database with the schema found in `schema.sql`.
-Download the GEDI data for your region of interest and ingest it into PostGIS with the script found at `src/spark/gedi_download_pipeline.py`.
+Download the GEDI data for your region of interest and ingest it into PostGIS with the script found at `biomassrecovery/spark/gedi_download_pipeline.py`.
 Note that this requires an existing earthdata account.
 
 JRC data: Download the JRC rasters for your area of interest from the publicly available dataset.
 
 ### DATA PROCESSING
-Run the overlay script, found at `src/spark/gedi_recovery_analysis_pipeline_monte_carlo.py`
+Run the overlay script, found at `biomassrecovery/spark/gedi_recovery_analysis_pipeline_monte_carlo.py`
 Run with `--help` to see all of the arguments required.
 
 ### DATA ANALYSIS/FIGURES

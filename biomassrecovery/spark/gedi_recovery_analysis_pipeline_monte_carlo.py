@@ -12,15 +12,15 @@ from pyspark.sql import DataFrame, SparkSession
 from shapely.geometry import Polygon
 from typing import List, Tuple
 
-from src import constants
-from src.data.jrc_loading import _to_nesw
-from src.processing.gedi_recovery_match_monte_carlo import match_monte_carlo
-from src.processing.recovery_analysis_models import (
+from biomassrecovery.import constants
+from biomassrecovery.data.jrc_loading import _to_nesw
+from biomassrecovery.processing.gedi_recovery_match_monte_carlo import match_monte_carlo
+from biomassrecovery.processing.recovery_analysis_models import (
     filter_shots,
     run_median_regression_model,
     run_ols_medians_model,
 )
-from src.utils import logging_util
+from biomassrecovery.utils import logging_util
 
 logger = logging_util.get_logger(__name__)
 planloc = "/tmp/gedi_analysis_workplan.png"

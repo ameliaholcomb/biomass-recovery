@@ -9,11 +9,11 @@ import pathlib
 import pyproj
 import utm
 
-from src import constants
-from src.processing.jrc_processing import compute_recovery_period
-from src.data.jrc_loading import load_jrc_data
-from src.data.gedi_database import GediDatabase
-from src.utils.logging_util import get_logger
+from biomassrecovery.import constants
+from biomassrecovery.processing.jrc_processing import compute_recovery_period
+from biomassrecovery.data.jrc_loading import load_jrc_data
+from biomassrecovery.data.gedi_database import GediDatabase
+from biomassrecovery.utils.logging_util import get_logger
 
 logger = get_logger(__file__)
 

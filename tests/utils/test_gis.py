@@ -1,6 +1,6 @@
 import pytest
 
-from src.utils.gis import get_utm_zone
+from biomassrecovery.utils.gis import get_utm_zone
 
 @pytest.mark.parametrize(
 	"lat,lon,expected",

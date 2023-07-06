@@ -6,8 +6,8 @@ import pandas as pd
 import pathlib
 import rioxarray as rxr
 
-from src.environment import ENV_VARS_PATH
-from src.utils.logging import get_logger
+from biomassrecovery.environment import ENV_VARS_PATH
+from biomassrecovery.utils.logging import get_logger
 
 logger = get_logger(__file__)
 

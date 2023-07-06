@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from shapely.geometry import MultiPolygon, Polygon
 from typing import Dict, Optional, Tuple
-from src.constants import GediProduct
+from biomassrecovery.constants import GediProduct
 
 
 CMR_URL = "https://cmr.earthdata.nasa.gov/search/"

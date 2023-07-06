@@ -16,14 +16,14 @@ import tempfile
 import shutil
 import sqlalchemy
 
-from src.data.gedi_cmr_query import query
-from src.data.gedi_download_pipeline import check_and_format_shape, DetailError
-from src.data import gedi_database_loader
-from src import constants
-from src import environment
+from biomassrecovery.data.gedi_cmr_query import query
+from biomassrecovery.data.gedi_download_pipeline import check_and_format_shape, DetailError
+from biomassrecovery.data import gedi_database_loader
+from biomassrecovery import constants
+from biomassrecovery import environment
 from functools import partial
 from typing import List, Optional
-from src.utils import logging_util
+from biomassrecovery.utils import logging_util
 
 logger = logging_util.get_logger(__name__)
 

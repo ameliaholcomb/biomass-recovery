@@ -4,7 +4,7 @@ import pathlib
 
 import requests
 
-from src.utils import util_logging
+from biomassrecovery.utils import util_logging
 
 logger = util_logging.get_logger(__name__)
 
