@@ -25,7 +25,6 @@ setup(
         "python-dotenv",
         "requests",
         "rioxarray",
-        "seaborn",
         "shapely",
         "sqlalchemy",
         "statsmodels",

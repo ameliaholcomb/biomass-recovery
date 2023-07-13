@@ -17,7 +17,6 @@ pyspark
 python-dotenv
 requests
 rioxarray
-seaborn
 shapely
 sqlalchemy
 statsmodels
