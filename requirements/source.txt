@@ -1,0 +1,28 @@
+# This is the minimal source pip file that should be used to then generate the frozen ones
+# Only explicit dependancies should be listed here, and they should generally be unpinned
+# unless absolutely necessary.
+
+geoalchemy2 # geopandas needs this, but seems to not fetch it
+geopandas
+h5py
+hvplot
+numpy
+pandas
+psutil
+psycopg2
+pyarrow
+pylr2
+pyproj
+pyspark
+python-dotenv
+requests
+rioxarray
+shapely
+sqlalchemy
+statsmodels
+tqdm
+utm
+xarray
+
+# Pinned as version caused SSL issues
+urllib3<2.0
