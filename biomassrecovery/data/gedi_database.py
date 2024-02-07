@@ -7,6 +7,7 @@ import pandas as pd
 import pyproj
 import sqlalchemy as db
 from sqlalchemy import create_engine, inspect
+from geoalchemy2 import Geometry # required to prevent warnings on column types
 
 from biomassrecovery.constants import WGS84
 from biomassrecovery.environment import DB_CONFIG
