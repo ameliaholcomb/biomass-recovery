@@ -193,7 +193,7 @@ class GediDatabase(object):
                             f"`{operator}` not allowed. Must be one of {COLUMN_OPERATORS}"
                         )
                     sql_column_operator_used = True
-                if (column not in self.allowed_cols[table_name]) and (column is not "*"):
+                if (column not in self.allowed_cols[table_name]) and (column != "*"):
                     raise ValueError(
                         f"`{column}` not allowed. Must be one of {sorted(list(self.allowed_cols[table_name]))} or `*`"
                     )
