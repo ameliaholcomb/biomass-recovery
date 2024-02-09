@@ -16,7 +16,10 @@ PROJECT_PATH = SRC_PATH.parent
 CONDA_ENV = os.getenv("CONDA_DEFAULT_ENV")
 
 # Log relatedd paths
-LOG_PATH = PROJECT_PATH / "logs"
+try:
+	LOG_PATH = Path(os.getenv("LOG_PATH"))
+except TypeError:
+	LOG_PATH = PROJECT_PATH / "logs"
 LOG_PATH.mkdir(parents=True, exist_ok=True)
 
 #  Data related paths
